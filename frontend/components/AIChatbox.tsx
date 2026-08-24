@@ -5,6 +5,7 @@ import {
   Sparkles, X, Send, Bot, User, Key, Settings,
   RefreshCw, Copy, Check, Cpu
 } from 'lucide-react'
+import { BACKEND_URL } from '../lib/api'
 
 interface Message {
   id: string
@@ -90,7 +91,7 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
     if (!textToSend) setInput('')
     setLoading(true)
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+    const backendUrl = BACKEND_URL
     const storedKey = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('placement_ops_hf_key') || '' : '')
 
     try {

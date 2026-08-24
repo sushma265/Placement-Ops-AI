@@ -1,7 +1,9 @@
 import { supabase } from './supabase'
 import type { Role } from './auth'
 
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+export const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  (process.env.NODE_ENV === 'production' ? 'https://placement-ops-ai.onrender.com' : 'http://localhost:8000')
 
 /**
  * Drop-in replacement for `fetch(`${BACKEND_URL}...`)` that attaches the

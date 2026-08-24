@@ -1,4 +1,4 @@
-import { apiFetch, syncProfile } from './api'
+import { apiFetch, syncProfile, BACKEND_URL } from './api'
 
 export interface StudentProfile {
   id: number
@@ -114,7 +114,7 @@ async function safeFetch(path: string, options?: RequestInit, retryOnSync = true
     if (err instanceof TypeError) {
       throw new Error(
         `Backend server is unreachable (${path}). ` +
-        'Make sure the FastAPI server is running on http://localhost:8000.'
+        `Make sure the FastAPI server is running at ${BACKEND_URL}.`
       )
     }
     throw err

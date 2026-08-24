@@ -51,12 +51,20 @@ from backend.agents.reporting_agent import ReportingAgent
 app = FastAPI(title="Placement Ops - AI Recruiter Agent Backend")
 
 # Enable CORS for frontend interaction
+frontend_url = os.environ.get("FRONTEND_URL")
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://placement-ops-ai.vercel.app",
+]
+if frontend_url:
+    clean_url = frontend_url.rstrip("/")
+    if clean_url not in origins:
+        origins.append(clean_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

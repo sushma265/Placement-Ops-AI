@@ -1,4 +1,4 @@
-import { apiFetch } from './api'
+import { apiFetch, syncProfile } from './api'
 
 export interface StudentProfile {
   id: number
@@ -55,21 +55,79 @@ export type StudentProfileUpdate = Partial<
   >
 >
 
+/** Translate an HTTP response into a meaningful error. Never throws a raw
+ *  "Failed to fetch" — that only happens at the network level and is caught
+ *  by the wrapFetch() helper below. */
 async function handle<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body?.detail || `Request failed (${res.status})`)
+  if (res.ok) return res.json()
+
+  let detail = ''
+  try { detail = (await res.json())?.detail ?? '' } catch {}
+
+  switch (res.status) {
+    case 401:
+      throw new Error(
+        detail || 'Not authenticated. Please log in with a real account to access your profile.'
+      )
+    case 403:
+      throw new Error(
+        detail ||
+          'No student profile is linked to this account. ' +
+          'Make sure you signed up as a Student and call /auth/sync-profile first.'
+      )
+    case 404:
+      throw new Error(detail || 'Profile not found on the server.')
+    case 422:
+      throw new Error(detail || `Validation error (${res.status}).`)
+    case 500:
+      throw new Error(detail || 'Internal server error. Check backend logs.')
+    default:
+      throw new Error(detail || `Server returned ${res.status}.`)
   }
-  return res.json()
+}
+
+/** Wraps apiFetch so that a network-level failure (backend unreachable,
+ *  CORS pre-flight blocked, DNS failure) becomes a clear user-facing message
+ *  instead of the raw browser "TypeError: Failed to fetch". */
+async function safeFetch(path: string, options?: RequestInit, retryOnSync = true): Promise<Response> {
+  try {
+    const res = await apiFetch(path, options)
+    if (res.status === 403 && retryOnSync) {
+      let detail = ''
+      try {
+        const cloned = res.clone()
+        detail = (await cloned.json())?.detail ?? ''
+      } catch {}
+      
+      if (detail.includes('sync-profile') || detail.includes('No profile on file')) {
+        try {
+          await syncProfile('student')
+          return await safeFetch(path, options, false)
+        } catch (syncErr) {
+          console.warn('Auto-sync failed in safeFetch:', syncErr)
+        }
+      }
+    }
+    return res
+  } catch (err: any) {
+    // TypeError is what browsers throw when fetch itself can't reach the server
+    if (err instanceof TypeError) {
+      throw new Error(
+        `Backend server is unreachable (${path}). ` +
+        'Make sure the FastAPI server is running on http://localhost:8000.'
+      )
+    }
+    throw err
+  }
 }
 
 export async function getMyProfile(): Promise<StudentProfile> {
-  return handle(await apiFetch('/students/me'))
+  return handle(await safeFetch('/students/me'))
 }
 
 export async function updateMyProfile(updates: StudentProfileUpdate): Promise<StudentProfile> {
   return handle(
-    await apiFetch('/students/me', {
+    await safeFetch('/students/me', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
@@ -82,7 +140,7 @@ export async function uploadMyResume(file: File): Promise<{ resume_url: string; 
   formData.append('file', file)
   // Note: don't set Content-Type manually -- the browser needs to set the
   // multipart boundary itself. apiFetch only adds the Authorization header.
-  return handle(await apiFetch('/students/me/resume', { method: 'POST', body: formData }))
+  return handle(await safeFetch('/students/me/resume', { method: 'POST', body: formData }))
 }
 
 export interface DashboardJob {
@@ -150,11 +208,11 @@ export interface StudentDashboardData {
 }
 
 export async function getMyDashboard(): Promise<StudentDashboardData> {
-  return handle(await apiFetch('/students/me/dashboard'))
+  return handle(await safeFetch('/students/me/dashboard'))
 }
 
 export async function applyToDrive(driveId: number): Promise<{ drive_id: number; status: string }> {
-  return handle(await apiFetch(`/students/me/apply/${driveId}`, { method: 'POST' }))
+  return handle(await safeFetch(`/students/me/apply/${driveId}`, { method: 'POST' }))
 }
 
 export interface ScoreBreakdownEntry {
@@ -175,12 +233,12 @@ export interface ResumeAnalysis {
 }
 
 export async function analyzeMyResume(): Promise<ResumeAnalysis> {
-  return handle(await apiFetch('/students/me/resume/analyze', { method: 'POST' }))
+  return handle(await safeFetch('/students/me/resume/analyze', { method: 'POST' }))
 }
 
 export async function getMyResumeAnalysis(): Promise<ResumeAnalysis | null> {
   try {
-    return await handle(await apiFetch('/students/me/resume/analysis'))
+    return await handle(await safeFetch('/students/me/resume/analysis'))
   } catch {
     return null
   }
@@ -189,7 +247,7 @@ export async function getMyResumeAnalysis(): Promise<ResumeAnalysis | null> {
 export async function generateResumeBullets(
   projectTitle: string, description: string
 ): Promise<{ bullets: string[]; source: string }> {
-  return handle(await apiFetch('/students/me/resume/bullets', {
+  return handle(await safeFetch('/students/me/resume/bullets', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ project_title: projectTitle, description }),
@@ -197,7 +255,7 @@ export async function generateResumeBullets(
 }
 
 export async function generateCoverLetter(driveId: number): Promise<{ cover_letter: string; source: string }> {
-  return handle(await apiFetch('/students/me/resume/cover-letter', {
+  return handle(await safeFetch('/students/me/resume/cover-letter', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ drive_id: driveId }),
@@ -205,7 +263,7 @@ export async function generateCoverLetter(driveId: number): Promise<{ cover_lett
 }
 
 export async function generateColdEmail(driveId: number): Promise<{ cold_email: string; source: string }> {
-  return handle(await apiFetch('/students/me/resume/cold-email', {
+  return handle(await safeFetch('/students/me/resume/cold-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ drive_id: driveId }),
@@ -221,7 +279,7 @@ export interface JDMatchResult {
 }
 
 export async function matchResumeToDrive(driveId: number): Promise<JDMatchResult> {
-  return handle(await apiFetch('/students/me/resume/match-drive', {
+  return handle(await safeFetch('/students/me/resume/match-drive', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ drive_id: driveId }),

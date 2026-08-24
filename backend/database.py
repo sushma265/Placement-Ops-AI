@@ -57,6 +57,20 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+def init_db():
+    """Create all tables if they don't exist yet.
+    Called at application startup (see main.py @app.on_event('startup')).
+    Safe to call repeatedly -- create_all is a no-op for tables that already exist.
+    """
+    # Import all models so their metadata is registered before create_all runs.
+    import importlib
+    try:
+        importlib.import_module("backend.models")
+    except Exception:
+        pass
+    Base.metadata.create_all(bind=engine)
+    print("Database: tables verified/created via Base.metadata.create_all")
+
 def get_db():
     db = SessionLocal()
     try:

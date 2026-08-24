@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Loader2, Save, Upload, FileText, CheckCircle2, ArrowLeft, Plus, X, FolderGit2, Link2, Globe,
+  ShieldAlert, RotateCcw,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
@@ -157,7 +158,48 @@ export default function ProfilePage() {
   if (!profile) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center text-center p-6">
-        <p className="text-sm text-muted-foreground">{error || 'Could not load your profile.'}</p>
+        <div className="max-w-md w-full bg-card border border-border rounded-2xl p-8 shadow-2xl">
+          <ShieldAlert className="mx-auto mb-4 text-red-400" size={36} />
+          <h2 className="text-base font-bold mb-2">
+            {error?.includes('authenticated') || error?.includes('bearer')
+              ? 'Sign in required'
+              : error?.includes('student profile')
+              ? 'No student profile found'
+              : 'Could not load profile'}
+          </h2>
+          <p className="text-xs text-muted-foreground mb-6 leading-relaxed">
+            {error || 'Could not load your profile. Please try again.'}
+          </p>
+          <div className="flex flex-col gap-2">
+            <button
+              className="btn btn-primary w-full"
+              onClick={() => router.push('/')}
+            >
+              ← Back to Dashboard
+            </button>
+            <button
+              className="btn btn-outline w-full flex items-center justify-center gap-2"
+              onClick={() => {
+                setLoading(true)
+                setError('')
+                // Re-run the session check + profile load
+                supabase.auth.getSession().then(async ({ data }) => {
+                  if (!data.session) { router.push('/'); return }
+                  try {
+                    const prof = await getMyProfile()
+                    setProfile(prof)
+                  } catch (e: any) {
+                    setError(e.message || 'Could not load your profile.')
+                  } finally {
+                    setLoading(false)
+                  }
+                })
+              }}
+            >
+              <RotateCcw size={13} /> Retry
+            </button>
+          </div>
+        </div>
       </div>
     )
   }

@@ -9,6 +9,6 @@ xgboost
 scikit-learn
 shap
 python-multipart
-pyjwt
+pyjwt[crypto]
 pypdf
 python-dotenv

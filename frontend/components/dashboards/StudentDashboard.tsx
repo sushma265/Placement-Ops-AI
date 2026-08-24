@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation'
 import {
   Zap, LayoutDashboard, User as UserIcon, Briefcase, ClipboardList, CalendarDays,
   Sparkles, Bell, Settings, LogOut, Moon, Menu, ChevronDown, Loader2, Gauge,
-  Target, FileCheck2, Send,
+  Target, FileCheck2, Send, ShieldAlert, RotateCcw,
 } from 'lucide-react'
-import { getMyDashboard, type StudentDashboardData } from '@/lib/student-api'
+import { getMyDashboard, getMyProfile, type StudentDashboardData, type StudentProfile } from '@/lib/student-api'
+import { supabase } from '@/lib/supabase'
 import { StatsCard } from '@/components/cards/StatsCard'
 import { ProfileCompletionCard } from '@/components/cards/ProfileCompletionCard'
 import { InterviewCard } from '@/components/cards/InterviewCard'
@@ -16,7 +17,6 @@ import { ActivityTimeline } from '@/components/timeline/ActivityTimeline'
 import { EligibleJobs } from '@/components/jobs/EligibleJobs'
 import { AppliedJobs } from '@/components/jobs/AppliedJobs'
 import { CareerAssistantCard } from '@/components/ai/CareerAssistantCard'
-import { getMyProfile, type StudentProfile } from '@/lib/student-api'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -39,8 +39,12 @@ export function StudentDashboard({ user, onLogout }: { user: any; onLogout: () =
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  // Track whether the user has a real Supabase session (demo users don't)
+  const [hasSession, setHasSession] = useState<boolean | null>(null)
+
   const reload = () => {
     setLoading(true)
+    setError('')
     Promise.all([getMyDashboard(), getMyProfile()])
       .then(([dashboard, prof]) => {
         setData(dashboard)
@@ -50,7 +54,21 @@ export function StudentDashboard({ user, onLogout }: { user: any; onLogout: () =
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { reload() }, [])
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      const session = data.session
+      setHasSession(!!session)
+      if (session) {
+        reload()
+      } else {
+        // Demo login — no real session, backend calls would return 401
+        setLoading(false)
+      }
+    }).catch(() => {
+      setHasSession(false)
+      setLoading(false)
+    })
+  }, [])
 
   const handleNavClick = (id: string, comingSoon?: boolean) => {
     if (comingSoon) return
@@ -75,10 +93,44 @@ export function StudentDashboard({ user, onLogout }: { user: any; onLogout: () =
     )
   }
 
+  // No Supabase session — demo login, cannot call authenticated backend APIs
+  if (hasSession === false) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="max-w-md w-full bg-card border border-border rounded-2xl p-8 text-center shadow-2xl">
+          <ShieldAlert className="mx-auto mb-4 text-amber-400" size={40} />
+          <h2 className="text-lg font-bold mb-2">Sign in required</h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            The Student Dashboard requires a real account. Demo mode cannot call
+            the protected backend APIs (/students/me and /students/me/dashboard)
+            without a valid Supabase JWT.
+          </p>
+          <p className="text-xs text-muted-foreground mb-6">
+            Please go back and sign up or sign in with your email + password or
+            a social provider (Google, GitHub, LinkedIn).
+          </p>
+          <button
+            className="btn btn-primary w-full"
+            onClick={onLogout}
+          >
+            ← Back to Login
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (error || !data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center text-center p-6">
-        <p className="text-sm text-muted-foreground">{error || 'Could not load your dashboard.'}</p>
+        <div className="max-w-md w-full">
+          <ShieldAlert className="mx-auto mb-3 text-red-400" size={32} />
+          <p className="text-sm text-foreground font-semibold mb-2">Could not load your dashboard</p>
+          <p className="text-xs text-muted-foreground mb-6">{error || 'An unknown error occurred.'}</p>
+          <button className="btn btn-outline flex items-center gap-2 mx-auto" onClick={reload}>
+            <RotateCcw size={14} /> Retry
+          </button>
+        </div>
       </div>
     )
   }

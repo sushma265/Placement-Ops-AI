@@ -1,5 +1,9 @@
 import os
+import sys
 from dotenv import load_dotenv
+
+# Ensure the parent directory of backend/ is in sys.path so 'backend' imports resolve.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Loads backend/.env into the process environment. Nothing in this codebase
 # did this before -- .env values (SUPABASE_JWT_SECRET, HUGGINGFACE_API_KEY,

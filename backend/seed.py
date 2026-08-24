@@ -1,4 +1,10 @@
+import os
+import sys
 import datetime
+
+# Ensure the parent directory of backend/ is in sys.path so 'backend' imports resolve.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal, engine, Base
 from backend.models import Student, Drive, EligibilityResult, MatchScore, Interview, ExceptionItem, Notification

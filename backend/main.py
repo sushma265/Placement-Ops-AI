@@ -73,6 +73,27 @@ app.add_middleware(
 os.makedirs(os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "resumes"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")), name="uploads")
 
+@app.on_event("startup")
+def on_startup():
+    from backend.database import init_db
+    try:
+        init_db()
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}", exc_info=True)
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    logger.error(f"Global exception handler caught: {exc}", exc_info=True)
+    tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Internal Server Error: {str(exc)}",
+            "traceback": tb.split("\n")
+        }
+    )
+
 @app.get("/")
 def read_root():
     return {"message": "Placement Ops Core Multi-Agent API is running."}

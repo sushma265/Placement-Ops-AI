@@ -31,7 +31,7 @@ export async function signUpWithEmail(email: string, password: string, name: str
     try {
       await supabase
         .from('profiles')
-        .upsert({ id: data.user.id, email, name, role }, { onConflict: 'id' })
+        .upsert({ id: data.user.id, email, full_name: name, role }, { onConflict: 'id' })
     } catch (e) {
       console.warn('Profile upsert warning:', e)
     }
@@ -104,7 +104,7 @@ export async function ensureProfile(userId: string, email: string | null, name: 
   try {
     const { data, error } = await supabase
       .from('profiles')
-      .upsert({ id: userId, email, name, role }, { onConflict: 'id' })
+      .upsert({ id: userId, email, full_name: name, role }, { onConflict: 'id' })
       .select()
       .maybeSingle()
     if (error) {

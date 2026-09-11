@@ -51,7 +51,24 @@ export async function signInWithOAuth(provider: 'google' | 'github' | 'linkedin_
   if (typeof window !== 'undefined') {
     localStorage.setItem('placement_ops_oauth_role', role)
   }
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+  
+  let origin = 'http://localhost:3000'
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    origin = process.env.NEXT_PUBLIC_SITE_URL
+  } else if (process.env.NEXT_PUBLIC_VERCEL_URL) {
+    origin = `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+  } else if (typeof window !== 'undefined') {
+    origin = window.location.origin
+  }
+
+  // Ensure origin doesn't end with a slash to avoid double slashes
+  origin = origin.replace(/\/$/, '')
+  
+  // If the user specifically wants the vercel app URL to be forced (based on their prompt):
+  if (origin.includes('localhost') && process.env.NODE_ENV === 'production') {
+      origin = 'https://placement-ops-ai.vercel.app'
+  }
+
   const redirectTo = `${origin}/auth/callback`
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,

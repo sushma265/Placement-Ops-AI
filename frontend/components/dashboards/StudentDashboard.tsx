@@ -65,7 +65,7 @@ export function StudentDashboard({ user, onLogout }: { user: any; onLogout: () =
         // Demo login — populate with mock data so the dashboard is still usable
         const demoProfile = user?.user || {}
         setData({
-          student: {
+          profile: {
             id: demoProfile.id || 'demo-student',
             name: demoProfile.name || 'Aditya Sharma',
             email: demoProfile.email || 'aditya.sharma@example.com',
@@ -76,6 +76,12 @@ export function StudentDashboard({ user, onLogout }: { user: any; onLogout: () =
             prs_score: demoProfile.prs_score ?? 75.0,
             backlogs: 0,
             placement_status: 'eligible',
+          },
+          stats: {
+            eligible_drives: 3,
+            applications_submitted: 0,
+            interviews_scheduled: 0,
+            offers_received: 0,
           },
           eligible_drives: [
             { id: 1, company_name: 'Acme Systems', role_title: 'Software Engineer', cgpa_cutoff: 8.0, status: 'published', stage: 'matching', created_at: '2026-08-20T10:00:00Z' },

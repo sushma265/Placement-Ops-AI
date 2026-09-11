@@ -11,7 +11,6 @@ import {
   getMyProfile, updateMyProfile, uploadMyResume, extractProfileFromResume,
   type StudentProfile, type StudentProfileUpdate, type ExtractedProfileData,
 } from '@/lib/student-api'
-import Agent13TalentCard from '@/components/ai/Agent13TalentCard'
 
 // ── small reusable bits (kept local -- page.tsx's helpers aren't exported) ──
 
@@ -549,11 +548,6 @@ export default function ProfilePage() {
                 <div className="text-xs text-muted-foreground">ATS Score: <strong className="text-foreground">{profile.resume_ats_score}</strong></div>
               )}
             </div>
-          </div>
-
-          {/* Agent 13 Talent Profile */}
-          <div className="panel mt-4">
-            <Agent13TalentCard studentId={profile.id} />
           </div>
 
         </div>

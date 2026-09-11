@@ -2559,9 +2559,9 @@ function ReportsScreen({ isOnline, drives }: { isOnline: boolean; drives: any[] 
 
 const agent13Features = [
   ['01', 'Purpose', 'Identifies students with capacity beyond the curriculum and channels them into matched opportunities to maximize placements, publications, and reputation.', Target],
-  ['02', 'Inputs', 'Academic trends, subject profiles, cert records (Agent 68), competitive programming, hackathons, and faculty nominations.', FileText],
-  ['03', 'Workflow', 'Builds strength profiles per student, matches to available opportunity types, and pairs with specific faculty research areas (Agent 17).', LayoutDashboard],
-  ['04', 'Outputs', 'Advanced learner lists, individual strength profiles, opportunity match recommendations, and participation outcome trackers.', BarChart3],
-  ['05', 'Integrations', 'Consumes Agents 10, 48, 68 to gather evidence. Feeds Agents 17, 24, 49, 50 to complete the student opportunity lifecycle.', Building2],
-  ['06', 'Primary Users', 'Heads of Department, faculty mentors, research coordinators, training and placement cell, and students.', Users],
+  ['02', 'Inputs & Parsing', 'Academic trends, subject profiles, and Agent 64 (Document Intelligence) performing novel confidence-scored extraction on uploaded student resumes.', FileText],
+  ['03', 'Action Generation', 'Builds strength profiles per student, discovers hidden talent, and matches students to specific faculty research areas and projects.', LayoutDashboard],
+  ['04', 'Opportunity Assignment', 'Executes agentic actions to directly assign students to projects (writing to research.project_member) subject to strict ACT_WITH_APPROVAL constraints.', Users],
+  ['05', 'Integrations', 'Consumes Agent 64 (Resume Parsing) to gather provisional evidence. Feeds Agents 17, 24, 49, 50 to complete the student opportunity lifecycle.', Building2],
+  ['06', 'Fairness & Audit', 'Maintains a continuous fairness loop to ensure non-placement opportunity distributions are equitable across all student branches and demographics.', BarChart3],
 ]

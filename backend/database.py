@@ -13,14 +13,11 @@ if env_db_url:
     if env_db_url.startswith("postgres://"):
         env_db_url = env_db_url.replace("postgres://", "postgresql://", 1)
     
-    # Try connecting to make sure it's valid
-    try:
-        temp_conn = psycopg2.connect(env_db_url, connect_timeout=3)
-        temp_conn.close()
-        DATABASE_URL = env_db_url
-        print("Database detection: Successfully connected using env DATABASE_URL")
-    except Exception as e:
-        print(f"Database detection: Failed to connect using env DATABASE_URL: {e}")
+    # Try connecting to make sure it's valid. If it fails, crash loud so we see the real error.
+    temp_conn = psycopg2.connect(env_db_url, connect_timeout=10)
+    temp_conn.close()
+    DATABASE_URL = env_db_url
+    print("Database detection: Successfully connected using env DATABASE_URL")
 
 if not DATABASE_URL:
     # Common connection credentials to probe on local system

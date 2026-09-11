@@ -472,6 +472,217 @@ class ResumeAgent:
         )
         return {"cover_letter": letter, "source": "template_fallback"}
 
+    # -----------------------------------------------------------------
+    # Profile extraction -- parse resume text into structured profile
+    # fields that can auto-fill the student's profile form on upload.
+    # -----------------------------------------------------------------
+    @classmethod
+    def extract_profile_data(cls, resume_text: str, hf_token: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Extracts structured student profile data from resume text.
+        Returns a dict with keys matching StudentProfileUpdate fields.
+        Any field that couldn't be extracted is omitted (not None) so the
+        caller can do a clean merge -- existing data won't be overwritten
+        unless the resume had something better.
+        """
+        if not resume_text.strip():
+            return {}
+
+        # --- Try LLM first ---
+        if hf_token:
+            system_prompt = (
+                "You are a resume parser. Extract structured information from the resume text. "
+                "Respond ONLY with a valid JSON object (no markdown, no prose) with these fields "
+                "(omit any field you can't confidently extract -- do NOT guess or fabricate): "
+                '{"name": "<full name>", '
+                '"email": "<email>", '
+                '"phone": "<phone number>", '
+                '"linkedin_url": "<linkedin URL>", '
+                '"github_url": "<github URL>", '
+                '"portfolio_url": "<portfolio/personal website URL>", '
+                '"branch": "<degree branch e.g. Computer Science, ECE>", '
+                '"cgpa": <numeric CGPA out of 10 or null>, '
+                '"tenth_pct": <10th class percentage as number or null>, '
+                '"twelfth_pct": <12th class percentage as number or null>, '
+                '"skills": [{"skill": "<skill name>", "level": "Intermediate"}], '
+                '"projects": [{"title": "<title>", "tech_stack": ["<tech>"], "description": "<brief>", "link": "<url or null>"}], '
+                '"certifications": [{"name": "<cert name>", "issuer": "<issuer>"}], '
+                '"internship_history": [{"company": "<company>", "role": "<role>", "duration_months": <int>}], '
+                '"hackathons": [{"name": "<hackathon>", "result": "<result or null>"}], '
+                '"preferred_roles": ["<role>"], '
+                '"languages": ["<language>"]}'
+            )
+            user_prompt = f"Resume text:\n{resume_text[:6000]}"
+            reply = call_llm(
+                [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                hf_token, max_tokens=1200, temperature=0.2,
+            )
+            if reply:
+                parsed = cls._try_parse_json(reply)
+                if isinstance(parsed, dict):
+                    # Sanitize numeric fields
+                    for num_field in ("cgpa", "tenth_pct", "twelfth_pct"):
+                        v = parsed.get(num_field)
+                        if v is not None:
+                            try:
+                                parsed[num_field] = float(v)
+                            except (TypeError, ValueError):
+                                parsed.pop(num_field, None)
+                    # Ensure skills have level
+                    skills = parsed.get("skills", [])
+                    if isinstance(skills, list):
+                        parsed["skills"] = [
+                            {"skill": s.get("skill", s) if isinstance(s, dict) else str(s),
+                             "level": s.get("level", "Intermediate") if isinstance(s, dict) else "Intermediate"}
+                            for s in skills if s
+                        ]
+                    parsed["source"] = "huggingface"
+                    return parsed
+                logger.warning("LLM profile extraction returned unparseable JSON, falling back to heuristic.")
+
+        # --- Heuristic fallback ---
+        return cls._heuristic_extract(resume_text)
+
+    @classmethod
+    def _heuristic_extract(cls, text: str) -> Dict[str, Any]:
+        """Best-effort heuristic extraction when no LLM is available."""
+        result: Dict[str, Any] = {}
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+
+        # Name: first non-empty line that looks like a name (2-4 words, mostly alpha, no @/:)
+        for line in lines[:8]:
+            parts = line.split()
+            if 2 <= len(parts) <= 4 and all(p.replace("-", "").replace(".", "").isalpha() for p in parts):
+                if "@" not in line and ":" not in line:
+                    result["name"] = line
+                    break
+
+        # Email
+        email_match = re.search(r"[\w\.\+\-]+@[\w\.\-]+\.\w{2,}", text)
+        if email_match:
+            result["email"] = email_match.group(0)
+
+        # Phone
+        phone_match = re.search(r"(?:\+91[\s\-]?)?[6-9]\d{9}|\+\d{1,3}[\s\-]?\d{10}", text)
+        if phone_match:
+            result["phone"] = phone_match.group(0).strip()
+
+        # LinkedIn
+        linkedin_match = re.search(r"https?://(?:www\.)?linkedin\.com/in/[\w\-]+/?", text, re.IGNORECASE)
+        if linkedin_match:
+            result["linkedin_url"] = linkedin_match.group(0)
+
+        # GitHub
+        github_match = re.search(r"https?://(?:www\.)?github\.com/[\w\-]+/?", text, re.IGNORECASE)
+        if github_match:
+            result["github_url"] = github_match.group(0)
+
+        # Portfolio (not github/linkedin)
+        portfolio_match = re.search(r"https?://(?!(?:www\.)?(?:linkedin|github)\.com)[\w\.\-]+\.\w{2,}[\w/\-]*", text, re.IGNORECASE)
+        if portfolio_match:
+            result["portfolio_url"] = portfolio_match.group(0)
+
+        # Branch / degree
+        branch_match = re.search(
+            r"\b(b\.?tech|b\.?e\.?|bachelor of (engineering|technology|science)|m\.?tech|b\.?sc|computer science|cse|ece|eee|mechanical|civil|it|information technology)\b",
+            text, re.IGNORECASE
+        )
+        if branch_match:
+            raw = branch_match.group(0).strip()
+            branch_map = {"cse": "Computer Science", "ece": "Electronics & Communication",
+                          "eee": "Electrical & Electronics", "it": "Information Technology",
+                          "b.tech": "B.Tech", "be": "B.E", "btech": "B.Tech"}
+            result["branch"] = branch_map.get(raw.lower(), raw.title())
+
+        # CGPA
+        cgpa_match = re.search(r"(?:cgpa|gpa)[:\s]*(\d+\.?\d*)\s*(?:/\s*10)?", text, re.IGNORECASE)
+        if cgpa_match:
+            try:
+                v = float(cgpa_match.group(1))
+                if 0 <= v <= 10:
+                    result["cgpa"] = v
+            except ValueError:
+                pass
+
+        # 10th percentage
+        tenth_match = re.search(r"(?:10th|x(?:th)?|ssc|matriculation)[^%\n]*?(\d{2,3}(?:\.\d+)?)\s*%", text, re.IGNORECASE)
+        if tenth_match:
+            try:
+                result["tenth_pct"] = float(tenth_match.group(1))
+            except ValueError:
+                pass
+
+        # 12th percentage
+        twelfth_match = re.search(r"(?:12th|xii(?:th)?|hsc|intermediate|higher secondary)[^%\n]*?(\d{2,3}(?:\.\d+)?)\s*%", text, re.IGNORECASE)
+        if twelfth_match:
+            try:
+                result["twelfth_pct"] = float(twelfth_match.group(1))
+            except ValueError:
+                pass
+
+        # Skills -- use existing taxonomy extraction
+        categorized = _extract_categorized_skills(text)
+        all_skills = _flatten_skills(categorized)
+        if all_skills:
+            result["skills"] = [{"skill": s, "level": "Intermediate"} for s in all_skills]
+
+        # Projects -- look for lines after "projects" heading
+        projects = []
+        project_section = re.search(r"(?:projects?|personal projects?)[\s:]*\n([\s\S]*?)(?:\n\n|\Z)", text, re.IGNORECASE)
+        if project_section:
+            proj_text = project_section.group(1)
+            proj_lines = [l.strip() for l in proj_text.splitlines() if l.strip()]
+            for i, line in enumerate(proj_lines[:6]):
+                if len(line) > 5 and not line.startswith("•") and not line.startswith("-"):
+                    # Try to guess the title (short line with mixed case)
+                    tech_stack = _flatten_skills(_extract_categorized_skills(line))
+                    projects.append({"title": line[:80], "tech_stack": tech_stack or [], "description": ""})
+        if projects:
+            result["projects"] = projects[:4]
+
+        # Certifications
+        certs = []
+        cert_section = re.search(r"(?:certifications?|courses?)[\s:]*\n([\s\S]*?)(?:\n\n|\Z)", text, re.IGNORECASE)
+        if cert_section:
+            for line in cert_section.group(1).splitlines()[:6]:
+                line = line.strip(" •-")
+                if len(line) > 4:
+                    certs.append({"name": line[:100], "issuer": ""})
+        if certs:
+            result["certifications"] = certs[:4]
+
+        # Internships
+        internships = []
+        intern_section = re.search(r"(?:internships?|experience|work experience)[\s:]*\n([\s\S]*?)(?:\n\n|\Z)", text, re.IGNORECASE)
+        if intern_section:
+            intern_text = intern_section.group(1)
+            # Try to find company-role pairs
+            for line in intern_text.splitlines()[:8]:
+                line = line.strip(" •-")
+                if len(line) > 5:
+                    dur_match = re.search(r"(\d+)\s*(?:months?|weeks?)", line, re.IGNORECASE)
+                    duration = int(dur_match.group(1)) if dur_match else 0
+                    if dur_match and "week" in dur_match.group(0).lower():
+                        duration = max(1, duration // 4)
+                    # Company name heuristic: first capitalized word cluster
+                    company_match = re.match(r"([A-Z][A-Za-z\s&\.]+?)(?:\s*[-|,·]|$)", line)
+                    company = company_match.group(1).strip() if company_match else line[:40]
+                    internships.append({"company": company, "role": "", "duration_months": duration})
+        if internships:
+            result["internship_history"] = internships[:3]
+
+        # Languages (spoken)
+        lang_match = re.search(r"(?:languages?)\s*[:\-]?\s*([A-Za-z,\s/]+)", text, re.IGNORECASE)
+        if lang_match:
+            langs = [l.strip() for l in re.split(r"[,/|]", lang_match.group(1)) if l.strip() and len(l.strip()) < 20]
+            known_langs = {"english", "hindi", "tamil", "telugu", "kannada", "malayalam", "marathi", "bengali", "gujarati", "punjabi", "urdu", "french", "german", "spanish"}
+            langs = [l for l in langs if l.lower() in known_langs]
+            if langs:
+                result["languages"] = langs[:5]
+
+        result["source"] = "heuristic"
+        return result
+
     @classmethod
     def generate_cold_email(
         cls, student_name: str, branch: str, skills: List[str],

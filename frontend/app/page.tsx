@@ -14,13 +14,14 @@ import { signUpWithEmail, signInWithEmail, signInWithOAuth, signOut, getProfile,
 import { apiFetch, syncProfile } from '../lib/api'
 import { AIChatbox } from '../components/AIChatbox'
 import { StudentDashboard } from '../components/dashboards/StudentDashboard'
+import FacultyDiscoveryDashboard from '../components/dashboards/FacultyDiscoveryDashboard'
 
 
 function StatusBadge({ tone = 'neutral', children }: { tone?: 'good' | 'danger' | 'warn' | 'neutral'; children: React.ReactNode }) {
   return <span className={`status-badge ${tone}`}><span className="status-dot" />{children}</span>
 }
 
-function MetricCard({ label, value, detail, icon: Icon, tone = 'teal' }: { label: string; value: string; detail: string; icon: React.ElementType; tone?: string }) {
+function MetricCard({ label, value, detail, icon: Icon, tone = 'blue' }: { label: string; value: string; detail: string; icon: React.ElementType; tone?: string }) {
   return <div className="metric-card"><div className="metric-top"><span>{label}</span><span className={`icon-box ${tone}`}><Icon size={16} /></span></div><div className="metric-value">{value}</div><div className="metric-detail">{detail}</div></div>
 }
 
@@ -278,12 +279,12 @@ function Landing({ onOpen }: { onOpen: () => void }) {
       </section>
       <section className="content-section" id="agents">
         <div className="center-title">
-          <div className="eyebrow">The operating layer</div>
-          <h2>Nine agents. One calm command center.</h2>
-          <p>Purpose-built workflows that remove coordination drag without hiding the reasoning behind a recommendation.</p>
+          <div className="eyebrow">Agent 13 Focus</div>
+          <h2>Fast Learner & Advanced Learner Agent</h2>
+          <p>Institutions consistently invest in the bottom of the distribution and neglect the top. Agent 13 identifies students with capacity beyond the standard curriculum and channels them into opportunities matched to their demonstrated strengths.</p>
         </div>
         <div className="agent-grid">
-          {agents.map(([num, title, desc, Icon]) => (
+          {agent13Features.map(([num, title, desc, Icon]) => (
             <div className="agent-card" key={title as string}>
               <div className="agent-number">{num as string}</div>
               <Icon size={19} className="text-primary" />
@@ -546,8 +547,8 @@ function LoginGate({ onLoginSuccess, onBack }: { onLoginSuccess: (user: any) => 
           </div>
         )}
         {info && (
-          <div className="mb-4 p-3 bg-emerald-950/30 border border-emerald-800/50 text-emerald-200 text-xs rounded-xl flex items-start gap-2.5 motion-page">
-            <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-emerald-400" />
+          <div className="mb-4 p-3 bg-blue-950/30 border border-blue-800/50 text-blue-200 text-xs rounded-xl flex items-start gap-2.5 motion-page">
+            <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-blue-400" />
             <span className="leading-relaxed">{info}</span>
           </div>
         )}
@@ -741,6 +742,8 @@ function Dashboard({ user, onLogout }: { user: any; onLogout: () => void }) {
     // to <StudentDashboard /> from the outer Page() component.
     if (userRole === 'recruiter') {
       setActive('recruiter-shortlist');
+    } else if (['faculty', 'hod', 'principal'].includes(userRole)) {
+      setActive('talent-discovery');
     } else {
       setActive('dashboard');
     }
@@ -755,6 +758,10 @@ function Dashboard({ user, onLogout }: { user: any; onLogout: () => void }) {
         { id: 'recruiter-shortlist', label: 'Candidate Shortlist', icon: Target },
         { id: 'recruiter-schedule', label: 'Interview Panels', icon: CalendarDays },
         { id: 'recruiter-outbox', label: 'Outbox Logs', icon: Bell }
+      ];
+    } else if (['faculty', 'hod', 'principal'].includes(userRole)) {
+      return [
+        { id: 'talent-discovery', label: 'Talent Discovery', icon: Target },
       ];
     } else {
       return [
@@ -802,6 +809,10 @@ function Dashboard({ user, onLogout }: { user: any; onLogout: () => void }) {
       case 'recruiter-outbox':
         return <NotificationsScreen isOnline={isOnline} />;
 
+      // FACULTY / HOD VIEWS
+      case 'talent-discovery':
+        return <FacultyDiscoveryDashboard />;
+
       default:
         return <div className="p-4">Select a tab from the sidebar.</div>;
     }
@@ -816,7 +827,7 @@ function Dashboard({ user, onLogout }: { user: any; onLogout: () => void }) {
         </div>
         
         <div className="workspace-switch">
-          <span className="avatar teal-bg">{profile.name ? profile.name.slice(0,2).toUpperCase() : 'PO'}</span>
+          <span className="avatar blue-bg">{profile.name ? profile.name.slice(0,2).toUpperCase() : 'PO'}</span>
           <div>
             <strong className="truncate max-w-[120px] block">{profile.name || 'Head of Placements'}</strong>
             <span className="capitalize">{userRole === 'tpo' ? 'TPO Admin' : userRole}</span>
@@ -839,7 +850,7 @@ function Dashboard({ user, onLogout }: { user: any; onLogout: () => void }) {
                   <span className="nav-count">{exceptionsCount}</span>
                 )}
                 {id === 'drives' && drives.length > 0 && (
-                  <span className="nav-count bg-emerald-950/20 text-emerald-600 dark:text-emerald-400">{drives.length}</span>
+                  <span className="nav-count bg-blue-950/20 text-blue-600 dark:text-blue-400">{drives.length}</span>
                 )}
               </button>
             )
@@ -965,7 +976,7 @@ function RecruiterShortlistScreen({ isOnline, activeDrive, drives, onSelectDrive
                     {Object.entries(c.feature_importance || {}).map(([key, val]: [string, any]) => (
                       <div key={key} className="flex justify-between max-w-xs">
                         <span>{key}</span>
-                        <strong className="text-emerald-600">+{val}%</strong>
+                        <strong className="text-blue-600">+{val}%</strong>
                       </div>
                     ))}
                   </div>
@@ -1736,7 +1747,7 @@ function MatchingScreen({ isOnline, activeDrive, drives, onSelectDrive }: { isOn
                     <div className="flex items-center gap-3 flex-1">
                       <input type="checkbox" className="w-4 h-4 cursor-pointer text-primary border-border accent-primary" checked={isSelected} onChange={() => toggleSelectStudent(c.student_id)} />
                       <span className="rank font-mono text-sm">#{c.rank}</span>
-                      <span className="avatar teal-bg text-xs shrink-0">{c.student_name.slice(0,2).toUpperCase()}</span>
+                      <span className="avatar blue-bg text-xs shrink-0">{c.student_name.slice(0,2).toUpperCase()}</span>
                       <div>
                         <strong className="text-sm block">{c.student_name}</strong>
                         <span className="text-xs text-muted-foreground">{c.branch} · {c.cgpa} CGPA</span>
@@ -1744,7 +1755,7 @@ function MatchingScreen({ isOnline, activeDrive, drives, onSelectDrive }: { isOn
                     </div>
 
                     <div className="candidate-score mr-4">
-                      <strong className="text-emerald-600 dark:text-emerald-400 font-display text-xl font-bold">{c.overall_score}%</strong>
+                      <strong className="text-blue-600 dark:text-blue-400 font-display text-xl font-bold">{c.overall_score}%</strong>
                       <span className="text-[10px] font-mono text-muted-foreground block text-right">compatibility</span>
                     </div>
 
@@ -1784,7 +1795,7 @@ function MatchingScreen({ isOnline, activeDrive, drives, onSelectDrive }: { isOn
                             {Object.entries(c.feature_importance || {}).map(([key, val]: [string, any]) => (
                               <div key={key} className="flex justify-between items-center text-xs font-semibold">
                                 <span>{key}</span>
-                                <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">+{val}%</span>
+                                <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">+{val}%</span>
                               </div>
                             ))}
                           </div>
@@ -2506,7 +2517,7 @@ function ReportsScreen({ isOnline, drives }: { isOnline: boolean; drives: any[] 
               </div>
               <div className="p-4 bg-muted/40 rounded-xl">
                 <span className="text-[10px] font-mono text-muted-foreground uppercase block">Offers</span>
-                <strong className="text-2xl font-display text-emerald-600 block mt-1 font-bold">{report.stats.offers_made}</strong>
+                <strong className="text-2xl font-display text-blue-600 block mt-1 font-bold">{report.stats.offers_made}</strong>
               </div>
               <div className="p-4 bg-muted/40 rounded-xl">
                 <span className="text-[10px] font-mono text-muted-foreground uppercase block">Turnout</span>
@@ -2543,14 +2554,11 @@ function ReportsScreen({ isOnline, drives }: { isOnline: boolean; drives: any[] 
   );
 }
 
-const agents = [
-  ['01', 'JD intake', 'Turn recruiter briefs into structured requirements.', FileText],
-  ['02', 'Eligibility', 'Apply rules across branches, CGPA and backlogs.', ClipboardCheck],
-  ['03', 'Matching', 'Rank candidates with transparent SHAP explanations.', Target],
-  ['04', 'Scheduling', 'Propose interview slots around real constraints.', CalendarDays],
-  ['05', 'Coordination', 'Keep panels, rooms and candidates in sync.', Building2],
-  ['06', 'Notification', 'Send updates to the right student cohort.', Bell],
-  ['07', 'Analytics', 'See skill gaps and placement readiness.', BarChart3],
-  ['08', 'Reporting', 'Export a clean audit trail for every drive.', FileText],
-  ['09', 'Exception', 'Surface ambiguity before it becomes a blocker.', AlertTriangle],
+const agent13Features = [
+  ['01', 'Purpose', 'Identifies students with capacity beyond the curriculum and channels them into matched opportunities to maximize placements, publications, and reputation.', Target],
+  ['02', 'Inputs', 'Academic trends, subject profiles, cert records (Agent 68), competitive programming, hackathons, and faculty nominations.', FileText],
+  ['03', 'Workflow', 'Builds strength profiles per student, matches to available opportunity types, and pairs with specific faculty research areas (Agent 17).', LayoutDashboard],
+  ['04', 'Outputs', 'Advanced learner lists, individual strength profiles, opportunity match recommendations, and participation outcome trackers.', BarChart3],
+  ['05', 'Integrations', 'Consumes Agents 10, 48, 68 to gather evidence. Feeds Agents 17, 24, 49, 50 to complete the student opportunity lifecycle.', Building2],
+  ['06', 'Primary Users', 'Heads of Department, faculty mentors, research coordinators, training and placement cell, and students.', Users],
 ]

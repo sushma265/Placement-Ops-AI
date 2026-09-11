@@ -164,12 +164,12 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-600 text-white font-medium px-4 py-3 rounded-full shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-300 group cursor-pointer border border-white/20"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 bg-gradient-to-r from-blue-500 via-blue-500 to-blue-600 text-white font-medium px-4 py-3 rounded-full shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-300 group cursor-pointer border border-white/20"
           aria-label="Open AI Placement Assistant"
         >
           <div className="relative">
             <Sparkles size={20} className="animate-pulse text-amber-200" />
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-300 rounded-full animate-ping" />
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-blue-300 rounded-full animate-ping" />
           </div>
           <span className="text-xs font-semibold tracking-wide font-mono uppercase">AI Co-Pilot</span>
         </button>
@@ -180,20 +180,20 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
         <div className="fixed bottom-6 right-6 z-50 w-[92vw] max-w-[440 h-full] max-h-[640px] h-[85vh] bg-[#0c1017]/95 backdrop-blur-2xl border border-white/15 rounded-3xl shadow-2xl flex flex-col overflow-hidden motion-page">
           
           {/* Header */}
-          <div className="p-4 bg-gradient-to-r from-emerald-950/60 via-slate-900/80 to-cyan-950/60 border-b border-white/10 flex items-center justify-between">
+          <div className="p-4 bg-gradient-to-r from-blue-950/60 via-slate-900/80 to-blue-950/60 border-b border-white/10 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-teal-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+              <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-blue-500 to-blue-400 flex items-center justify-center shadow-lg shadow-blue-500/20">
                 <Bot size={20} className="text-black" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-bold text-white tracking-tight">Placement Ops AI</h3>
-                  <span className="text-[10px] font-mono bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="text-[10px] font-mono bg-blue-500/20 border border-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full flex items-center gap-1">
                     <Cpu size={10} /> Hugging Face
                   </span>
                 </div>
                 <p className="text-[11px] text-gray-400 flex items-center gap-1.5 mt-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
                   Ready • {userRole.toUpperCase()} View
                 </p>
               </div>
@@ -220,7 +220,7 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
           {/* Settings Drawer Slide-Down */}
           {showSettings && (
             <div className="p-4 bg-slate-950 border-b border-white/10 space-y-3 text-xs motion-page">
-              <div className="flex items-center gap-2 text-emerald-400 font-semibold font-mono text-[11px] uppercase tracking-wide">
+              <div className="flex items-center gap-2 text-blue-400 font-semibold font-mono text-[11px] uppercase tracking-wide">
                 <Key size={14} /> Hugging Face API Configuration
               </div>
 
@@ -234,10 +234,10 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
                     placeholder="e.g. hf_xxxxxxxxxxxxxxxxxxxxxxxxxx"
                     value={apiKey}
                     onChange={e => setApiKey(e.target.value)}
-                    className="w-full bg-black/60 border border-white/15 rounded-xl p-2.5 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-emerald-500 font-mono"
+                    className="w-full bg-black/60 border border-white/15 rounded-xl p-2.5 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500 font-mono"
                   />
                   <p className="text-[10px] text-gray-400 mt-1">
-                    Get a free API key at <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="text-cyan-400 underline">huggingface.co/settings/tokens</a>
+                    Get a free API key at <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="text-blue-400 underline">huggingface.co/settings/tokens</a>
                   </p>
                 </div>
 
@@ -248,7 +248,7 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
                   <select
                     value={selectedModel}
                     onChange={e => setSelectedModel(e.target.value)}
-                    className="w-full bg-black/60 border border-white/15 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-sans"
+                    className="w-full bg-black/60 border border-white/15 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-blue-500 font-sans"
                   >
                     {models.map(m => (
                       <option key={m.id} value={m.id}>{m.name}</option>
@@ -259,7 +259,7 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
                 <div className="flex gap-2">
                   <button
                     type="submit"
-                    className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-2 rounded-xl text-xs transition-all cursor-pointer"
+                    className="flex-1 bg-blue-500 hover:bg-blue-400 text-black font-semibold py-2 rounded-xl text-xs transition-all cursor-pointer"
                   >
                     Save Credentials
                   </button>
@@ -288,14 +288,14 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
                 className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'} motion-page`}
               >
                 {msg.role === 'assistant' && (
-                  <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-teal-500 to-emerald-400 flex items-center justify-center shrink-0 mt-0.5 shadow-md">
+                  <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-blue-500 to-blue-400 flex items-center justify-center shrink-0 mt-0.5 shadow-md">
                     <Bot size={15} className="text-black" />
                   </div>
                 )}
 
                 <div className={`group relative max-w-[85%] rounded-2xl p-3.5 leading-relaxed ${
                   msg.role === 'user'
-                    ? 'bg-emerald-600 text-white rounded-br-none shadow-lg'
+                    ? 'bg-blue-600 text-white rounded-br-none shadow-lg'
                     : 'bg-slate-900/90 border border-white/10 text-gray-200 rounded-bl-none shadow-md'
                 }`}>
                   {/* Markdown formatted content preview */}
@@ -318,7 +318,7 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
                         className="opacity-0 group-hover:opacity-100 hover:text-white transition-opacity p-0.5"
                         title="Copy message"
                       >
-                        {copiedId === msg.id ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                        {copiedId === msg.id ? <Check size={12} className="text-blue-400" /> : <Copy size={12} />}
                       </button>
                     </div>
                   </div>
@@ -334,11 +334,11 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
 
             {loading && (
               <div className="flex gap-3 justify-start motion-page">
-                <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-teal-500 to-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-blue-500 to-blue-400 flex items-center justify-center shrink-0 mt-0.5">
                   <Bot size={15} className="text-black" />
                 </div>
                 <div className="bg-slate-900/90 border border-white/10 rounded-2xl rounded-bl-none p-3.5 text-gray-400 flex items-center gap-2">
-                  <RefreshCw size={14} className="animate-spin text-emerald-400" />
+                  <RefreshCw size={14} className="animate-spin text-blue-400" />
                   <span className="text-xs font-mono">Hugging Face model thinking…</span>
                 </div>
               </div>
@@ -354,7 +354,7 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
                 <button
                   key={prompt}
                   onClick={() => handleSend(prompt)}
-                  className="shrink-0 text-[10px] font-mono bg-white/5 hover:bg-white/10 border border-white/10 text-emerald-300 px-2.5 py-1 rounded-full transition-all cursor-pointer hover:border-emerald-500/50"
+                  className="shrink-0 text-[10px] font-mono bg-white/5 hover:bg-white/10 border border-white/10 text-blue-300 px-2.5 py-1 rounded-full transition-all cursor-pointer hover:border-blue-500/50"
                 >
                   ⚡ {prompt}
                 </button>
@@ -369,7 +369,7 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
                 e.preventDefault()
                 handleSend()
               }}
-              className="flex items-center gap-2 bg-black/60 border border-white/15 rounded-2xl px-3 py-1.5 focus-within:border-emerald-500 transition-colors"
+              className="flex items-center gap-2 bg-black/60 border border-white/15 rounded-2xl px-3 py-1.5 focus-within:border-blue-500 transition-colors"
             >
               <input
                 type="text"
@@ -382,7 +382,7 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
               <button
                 type="submit"
                 disabled={!input.trim() || loading}
-                className="p-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold disabled:opacity-30 disabled:hover:bg-emerald-500 transition-all cursor-pointer shrink-0"
+                className="p-2 rounded-xl bg-blue-500 hover:bg-blue-400 text-black font-bold disabled:opacity-30 disabled:hover:bg-blue-500 transition-all cursor-pointer shrink-0"
               >
                 <Send size={14} />
               </button>

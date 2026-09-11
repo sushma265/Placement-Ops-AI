@@ -60,12 +60,12 @@ export default function AuthCallback() {
     <div className="min-h-screen bg-[#07090e] text-white flex flex-col items-center justify-center p-6 font-sans">
       <div className="w-full max-w-md bg-[#0d121f]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-8 text-center shadow-2xl relative overflow-hidden">
         {/* Animated Background Gradients */}
-        <div className="absolute top-0 left-1/4 w-32 h-32 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 left-1/4 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 right-1/4 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl pointer-events-none" />
 
         {status === 'loading' && (
           <div className="flex flex-col items-center space-y-6 py-6">
-            <Loader2 className="w-12 h-12 text-cyan-400 animate-spin" />
+            <Loader2 className="w-12 h-12 text-blue-400 animate-spin" />
             <div>
               <h2 className="text-xl font-bold tracking-tight">{message}</h2>
               <p className="text-sm text-gray-400 mt-2">Securing your session, please hold on.</p>
@@ -75,9 +75,9 @@ export default function AuthCallback() {
 
         {status === 'success' && (
           <div className="flex flex-col items-center space-y-6 py-6 motion-safe:animate-bounce">
-            <CheckCircle2 className="w-12 h-12 text-emerald-400" />
+            <CheckCircle2 className="w-12 h-12 text-blue-400" />
             <div>
-              <h2 className="text-xl font-bold tracking-tight text-emerald-400">{message}</h2>
+              <h2 className="text-xl font-bold tracking-tight text-blue-400">{message}</h2>
               <p className="text-sm text-gray-400 mt-2">Redirecting to your dashboard...</p>
             </div>
           </div>

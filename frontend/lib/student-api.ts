@@ -143,6 +143,31 @@ export async function uploadMyResume(file: File): Promise<{ resume_url: string; 
   return handle(await safeFetch('/students/me/resume', { method: 'POST', body: formData }))
 }
 
+export interface ExtractedProfileData {
+  name?: string
+  email?: string
+  phone?: string
+  branch?: string
+  cgpa?: number
+  tenth_pct?: number
+  twelfth_pct?: number
+  linkedin_url?: string
+  github_url?: string
+  portfolio_url?: string
+  skills?: { skill: string; level: string }[]
+  projects?: { title: string; tech_stack: string[]; description?: string; link?: string }[]
+  certifications?: { name: string; issuer: string }[]
+  internship_history?: { company: string; role?: string; duration_months: number }[]
+  hackathons?: { name: string; result?: string }[]
+  preferred_roles?: string[]
+  languages?: string[]
+  source?: 'huggingface' | 'heuristic'
+}
+
+export async function extractProfileFromResume(): Promise<ExtractedProfileData> {
+  return handle(await safeFetch('/students/me/resume/extract', { method: 'POST' }))
+}
+
 export interface DashboardJob {
   drive_id: number
   company_name: string

@@ -203,5 +203,123 @@ class ProfileRole(Base):
 
     profile_id = Column(String, primary_key=True)  # Supabase auth.users.id (uuid, as text)
     email = Column(String, nullable=False)
-    role = Column(String, nullable=False)  # student, recruiter, tpo
+    role = Column(String, nullable=False)  # student, recruiter, tpo, faculty, hod, principal
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+# ==========================================
+# AGENT 13 - STUDENTLIFE / CURRICULUM
+# ==========================================
+class StudentInterest(Base):
+    __tablename__ = "student_interest"
+    __table_args__ = {"schema": "studentlife"}
+    student_interest_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    student_id = Column(Integer, ForeignKey("public.students.id"), nullable=False)
+    area = Column(String, nullable=False)
+    declared_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class CourseDomainTag(Base):
+    __tablename__ = "course_domain_tag"
+    __table_args__ = {"schema": "curriculum"}
+    course_id = Column(String, primary_key=True)
+    domain = Column(String, nullable=False)
+    weight = Column(Float, default=1.0)
+
+class ResumeClaim(Base):
+    __tablename__ = "resume_claim"
+    __table_args__ = {"schema": "studentlife"}
+    claim_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    student_id = Column(Integer, ForeignKey("public.students.id"), nullable=False)
+    claim_type = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    domain = Column(String, nullable=False)
+    verification_status = Column(String, default="PENDING")
+    promoted_to_achievement_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+# ==========================================
+# AGENT 13 - RESEARCH / FACULTY
+# ==========================================
+class FacultyExpertise(Base):
+    __tablename__ = "faculty_expertise"
+    __table_args__ = {"schema": "people"}
+    faculty_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    profile_id = Column(String, ForeignKey("public.profile_roles.profile_id"), unique=True, nullable=False)
+    name = Column(String, nullable=False)
+    department = Column(String, nullable=False)
+    research_areas = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class ResearchProject(Base):
+    __tablename__ = "project"
+    __table_args__ = {"schema": "research"}
+    project_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    faculty_id = Column(Integer, ForeignKey("people.faculty_expertise.faculty_id"), nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    status = Column(String, default="ACTIVE")
+    capacity = Column(Integer, default=1)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class ProjectRequirement(Base):
+    __tablename__ = "project_requirement"
+    __table_args__ = {"schema": "research"}
+    requirement_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String, ForeignKey("research.project.project_id", ondelete="CASCADE"), nullable=False)
+    domain = Column(String, nullable=True)
+    skill = Column(String, nullable=True)
+    min_score = Column(Float, default=0.0)
+    is_required = Column(Boolean, default=True)
+    weight = Column(Float, default=1.0)
+
+class ProjectMember(Base):
+    __tablename__ = "project_member"
+    __table_args__ = {"schema": "research"}
+    membership_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String, ForeignKey("research.project.project_id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(Integer, ForeignKey("public.students.id"), nullable=False)
+    role = Column(String, default="RESEARCH_ASSISTANT")
+    status = Column(String, default="ACTIVE")
+    assigned_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+# ==========================================
+# AGENT 13 - AGENTOPS / RUN TRACKING
+# ==========================================
+class AgentRun(Base):
+    __tablename__ = "agent_run"
+    __table_args__ = {"schema": "agentops"}
+    run_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    agent_code = Column(String, default="A13_FAST_LEARNER")
+    triggered_by = Column(String, ForeignKey("public.profile_roles.profile_id"), nullable=False)
+    status = Column(String, default="STARTED")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class AgentRunInput(Base):
+    __tablename__ = "agent_run_input"
+    __table_args__ = {"schema": "agentops"}
+    input_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    run_id = Column(String, ForeignKey("agentops.agent_run.run_id", ondelete="CASCADE"), nullable=False)
+    context_snapshot = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class AgentOutput(Base):
+    __tablename__ = "agent_output"
+    __table_args__ = {"schema": "agentops"}
+    output_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    run_id = Column(String, ForeignKey("agentops.agent_run.run_id", ondelete="CASCADE"), nullable=False)
+    subject_type = Column(String, default="STUDENT")
+    subject_id = Column(Integer, ForeignKey("public.students.id"), nullable=False)
+    payload = Column(JSON, nullable=False)
+    reasoning_summary = Column(Text, nullable=False)
+    confidence = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class HumanReview(Base):
+    __tablename__ = "human_review"
+    __table_args__ = {"schema": "agentops"}
+    review_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    output_id = Column(String, ForeignKey("agentops.agent_output.output_id", ondelete="CASCADE"), nullable=False)
+    decision = Column(String, default="PENDING")
+    reviewed_by = Column(String, ForeignKey("public.profile_roles.profile_id"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    comments = Column(Text, nullable=True)

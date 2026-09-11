@@ -146,7 +146,7 @@ export function StudentDashboard({ user, onLogout }: { user: any; onLogout: () =
         </div>
 
         <div className="workspace-switch">
-          <span className="avatar teal-bg">{p.name ? p.name.slice(0, 2).toUpperCase() : 'ST'}</span>
+          <span className="avatar blue-bg">{p.name ? p.name.slice(0, 2).toUpperCase() : 'ST'}</span>
           <div>
             <strong className="truncate max-w-[120px] block">{p.name}</strong>
             <span>Student</span>

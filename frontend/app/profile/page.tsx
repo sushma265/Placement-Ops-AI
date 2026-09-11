@@ -4,12 +4,14 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Loader2, Save, Upload, FileText, CheckCircle2, ArrowLeft, Plus, X, FolderGit2, Link2, Globe,
-  ShieldAlert, RotateCcw,
+  ShieldAlert, RotateCcw, Sparkles, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
-  getMyProfile, updateMyProfile, uploadMyResume, type StudentProfile, type StudentProfileUpdate,
+  getMyProfile, updateMyProfile, uploadMyResume, extractProfileFromResume,
+  type StudentProfile, type StudentProfileUpdate, type ExtractedProfileData,
 } from '@/lib/student-api'
+import Agent13TalentCard from '@/components/ai/Agent13TalentCard'
 
 // ── small reusable bits (kept local -- page.tsx's helpers aren't exported) ──
 
@@ -66,6 +68,9 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [resumeUploading, setResumeUploading] = useState(false)
+  const [extracting, setExtracting] = useState(false)
+  const [autofillResult, setAutofillResult] = useState<{ fields: string[]; source: string } | null>(null)
+  const [showAutofillDetails, setShowAutofillDetails] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -136,9 +141,72 @@ export default function ProfilePage() {
     if (!file || !profile) return
     setResumeUploading(true)
     setError('')
+    setAutofillResult(null)
     try {
       const { resume_url, resume_filename } = await uploadMyResume(file)
-      setProfile({ ...profile, resume_url, resume_filename })
+      const updatedProfile = { ...profile, resume_url, resume_filename }
+      setProfile(updatedProfile)
+
+      // Auto-extract profile details from resume
+      setExtracting(true)
+      try {
+        const extracted: ExtractedProfileData = await extractProfileFromResume()
+        const filledFields: string[] = []
+
+        // Merge only non-empty extracted values
+        const merged: Partial<StudentProfile> = {}
+
+        if (extracted.name?.trim()) { merged.name = extracted.name.trim(); filledFields.push('Name') }
+        if (extracted.branch?.trim()) { merged.branch = extracted.branch.trim(); filledFields.push('Branch') }
+        if (extracted.cgpa != null && extracted.cgpa > 0) { merged.cgpa = extracted.cgpa; filledFields.push('CGPA') }
+        if (extracted.tenth_pct != null && extracted.tenth_pct > 0) { merged.tenth_pct = extracted.tenth_pct; filledFields.push('10th %') }
+        if (extracted.twelfth_pct != null && extracted.twelfth_pct > 0) { merged.twelfth_pct = extracted.twelfth_pct; filledFields.push('12th %') }
+        if (extracted.linkedin_url?.trim()) { merged.linkedin_url = extracted.linkedin_url.trim(); filledFields.push('LinkedIn') }
+        if (extracted.github_url?.trim()) { merged.github_url = extracted.github_url.trim(); filledFields.push('GitHub') }
+        if (extracted.portfolio_url?.trim()) { merged.portfolio_url = extracted.portfolio_url.trim(); filledFields.push('Portfolio') }
+        if (extracted.skills && extracted.skills.length > 0) {
+          // Merge new skills with existing, deduplicating by skill name
+          const existingNames = new Set((updatedProfile.skills || []).map(s => s.skill.toLowerCase()))
+          const newSkills = extracted.skills.filter(s => !existingNames.has(s.skill.toLowerCase()))
+          merged.skills = [...(updatedProfile.skills || []), ...newSkills]
+          if (newSkills.length > 0) filledFields.push(`Skills (${newSkills.length} added)`)
+        }
+        if (extracted.projects && extracted.projects.length > 0 && (updatedProfile.projects || []).length === 0) {
+          merged.projects = extracted.projects
+          filledFields.push(`Projects (${extracted.projects.length})`)
+        }
+        if (extracted.certifications && extracted.certifications.length > 0 && (updatedProfile.certifications || []).length === 0) {
+          merged.certifications = extracted.certifications
+          filledFields.push(`Certifications (${extracted.certifications.length})`)
+        }
+        if (extracted.internship_history && extracted.internship_history.length > 0 && (updatedProfile.internship_history || []).length === 0) {
+          merged.internship_history = extracted.internship_history
+          filledFields.push(`Internships (${extracted.internship_history.length})`)
+        }
+        if (extracted.hackathons && extracted.hackathons.length > 0 && (updatedProfile.hackathons || []).length === 0) {
+          merged.hackathons = extracted.hackathons
+          filledFields.push(`Hackathons (${extracted.hackathons.length})`)
+        }
+        if (extracted.preferred_roles && extracted.preferred_roles.length > 0 && (updatedProfile.preferred_roles || []).length === 0) {
+          merged.preferred_roles = extracted.preferred_roles
+          filledFields.push('Preferred Roles')
+        }
+        if (extracted.languages && extracted.languages.length > 0 && (updatedProfile.languages || []).length === 0) {
+          merged.languages = extracted.languages
+          filledFields.push('Languages')
+        }
+
+        if (filledFields.length > 0) {
+          setProfile({ ...updatedProfile, ...merged })
+          setAutofillResult({ fields: filledFields, source: extracted.source || 'heuristic' })
+          setShowAutofillDetails(false)
+        }
+      } catch (extractErr: any) {
+        // Non-fatal: resume uploaded fine, extraction just couldn't parse it
+        console.warn('Profile auto-extraction failed:', extractErr)
+      } finally {
+        setExtracting(false)
+      }
     } catch (e: any) {
       setError(e.message || 'Resume upload failed.')
     } finally {
@@ -229,6 +297,71 @@ export default function ProfilePage() {
         )}
         {error && (
           <div className="status-badge danger mb-4">{error}</div>
+        )}
+
+        {/* Auto-fill banner */}
+        {(extracting || autofillResult) && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(168,85,247,0.15) 100%)',
+            border: '1px solid rgba(99,102,241,0.35)',
+            borderRadius: '14px',
+            padding: '14px 18px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '12px',
+          }}>
+            <div style={{ flexShrink: 0, marginTop: '2px' }}>
+              {extracting
+                ? <Loader2 size={18} className="animate-spin" style={{ color: '#818cf8' }} />
+                : <Sparkles size={18} style={{ color: '#818cf8' }} />}
+            </div>
+            <div style={{ flex: 1 }}>
+              {extracting ? (
+                <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#c7d2fe' }}>
+                  Extracting your details from the resume…
+                </p>
+              ) : autofillResult && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
+                    <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#c7d2fe' }}>
+                      ✨ Auto-filled {autofillResult.fields.length} field{autofillResult.fields.length !== 1 ? 's' : ''} from your resume
+                      {autofillResult.source === 'huggingface' && <span style={{ fontSize: '10px', background: 'rgba(99,102,241,0.3)', padding: '1px 6px', borderRadius: '4px', marginLeft: '6px' }}>AI</span>}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowAutofillDetails(!showAutofillDetails)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#818cf8', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px' }}
+                    >
+                      {showAutofillDetails ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      {showAutofillDetails ? 'Hide' : 'Details'}
+                    </button>
+                  </div>
+                  {showAutofillDetails && (
+                    <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                      {autofillResult.fields.map((f, i) => (
+                        <span key={i} style={{ fontSize: '11px', background: 'rgba(99,102,241,0.25)', color: '#c7d2fe', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                          {f}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#818cf8' }}>
+                    Review the filled fields below and click <strong>Save changes</strong> to confirm.
+                  </p>
+                </>
+              )}
+            </div>
+            {autofillResult && (
+              <button
+                type="button"
+                onClick={() => setAutofillResult(null)}
+                style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#818cf8', opacity: 0.7 }}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
         )}
 
         {/* Completion */}
@@ -392,14 +525,14 @@ export default function ProfilePage() {
 
           {/* Resume */}
           <div className="panel mt-4">
-            <div className="panel-head"><div><h2>Resume</h2></div></div>
+            <div className="panel-head"><div><h2>Resume</h2><p>Upload your PDF — we'll auto-fill your profile details from it.</p></div></div>
             <div className="upload-panel">
               <div className="upload-zone">
                 <div className="upload-icon"><Upload size={22} /></div>
-                <p>PDF only, up to 5MB.</p>
+                <p>PDF only, up to 5MB. Details are extracted automatically.</p>
                 <label className="btn btn-outline" style={{ cursor: 'pointer', display: 'inline-flex' }}>
                   {resumeUploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-                  {resumeUploading ? 'Uploading…' : 'Choose file'}
+                  {resumeUploading ? 'Uploading…' : extracting ? 'Extracting…' : 'Choose file'}
                   <input type="file" accept="application/pdf" onChange={handleResumeChange} className="hidden" style={{ display: 'none' }} disabled={resumeUploading} />
                 </label>
               </div>
@@ -417,6 +550,12 @@ export default function ProfilePage() {
               )}
             </div>
           </div>
+
+          {/* Agent 13 Talent Profile */}
+          <div className="panel mt-4">
+            <Agent13TalentCard studentId={profile.id} />
+          </div>
+
         </div>
       </div>
     </div>

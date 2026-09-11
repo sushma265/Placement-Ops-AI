@@ -47,6 +47,7 @@ from backend.agents.notification_agent import NotificationAgent
 from backend.agents.exception_agent import ExceptionAgent
 from backend.agents.analytics_agent import AnalyticsAgent
 from backend.agents.reporting_agent import ReportingAgent
+from backend.agents.talent_discovery_agent import TalentDiscoveryAgent
 
 app = FastAPI(title="Placement Ops - AI Recruiter Agent Backend")
 
@@ -103,9 +104,9 @@ class SyncProfileRequest(BaseModel):
     FIRST time this is called for a given profile_id -- it locks in the
     role in profile_roles and is ignored on every subsequent call, so a
     later request can't silently change someone's role."""
-    role: str  # student, recruiter, tpo
+    role: str  # student, recruiter, tpo, faculty, hod, principal
 
-ALLOWED_ROLES = {"student", "recruiter", "tpo"}
+ALLOWED_ROLES = {"student", "recruiter", "tpo", "faculty", "hod", "principal"}
 
 @app.post("/auth/sync-profile")
 def sync_profile(req: SyncProfileRequest, request: Request, db: Session = Depends(get_db)):
@@ -180,14 +181,11 @@ def sync_profile(req: SyncProfileRequest, request: Request, db: Session = Depend
             "profile_complete": bool(student.branch and student.cgpa),
         }
 
-    if role == "recruiter":
-        # No dedicated recruiter/company table yet -- that's Milestone 1+
-        # (Recruiter Dashboard) scope. Identity is confirmed; profile
-        # completion (company name, etc.) happens there.
-        return {"role": "recruiter", "profile_id": profile_id, "email": email}
+    if role in ["recruiter", "tpo", "faculty", "hod", "principal"]:
+        # Identity is confirmed; profile completion happens in respective dashboards
+        return {"role": role, "profile_id": profile_id, "email": email}
 
-    # role == "tpo"
-    return {"role": "tpo", "profile_id": profile_id, "email": email}
+    return {"role": role, "profile_id": profile_id, "email": email}
 
 
 # ==========================================
@@ -327,6 +325,43 @@ async def upload_my_resume(
     db.commit()
 
     return {"resume_url": student.resume_url, "resume_filename": student.resume_filename}
+
+
+@app.post("/students/me/resume/extract")
+def extract_profile_from_resume(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_role("student")),
+):
+    """
+    Parse the student's already-uploaded resume PDF and return structured
+    profile fields that the frontend can use to auto-fill the profile form.
+    Does NOT persist anything -- the student still has to hit Save.
+    """
+    student = _get_own_student(db, user)
+    if not student.resume_url:
+        raise HTTPException(status_code=400, detail="Upload a resume before extracting profile data.")
+
+    resume_path = os.path.join(RESUME_UPLOAD_DIR, os.path.basename(student.resume_url))
+    resume_text = ResumeAgent.extract_text_from_pdf(resume_path)
+
+    if not resume_text.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Couldn't extract text from your resume. Make sure it is a text-based PDF, not a scanned image."
+        )
+
+    extracted = ResumeAgent.extract_profile_data(resume_text, hf_token=get_hf_token())
+
+    db.add(AuditLog(
+        action="resume_profile_extracted",
+        target_type="student",
+        target_id=student.id,
+        performed_by=student.email,
+        details=f"source={extracted.get('source', 'unknown')}, fields={list(extracted.keys())}",
+    ))
+    db.commit()
+
+    return extracted
 
 
 @app.post("/students/me/resume/analyze")
@@ -1259,6 +1294,30 @@ def ai_chat(req: AIChatRequest, request: Request, db: Session = Depends(get_db))
 You are currently assisting a user logged in as role: {role_context.upper()}. 
 Provide clear, actionable, concise, and professional responses tailored to placement officers, recruiters, and students. Use markdown formatting with bullet points where appropriate."""
 
+    # RAG Context Injection: Detect registration number / student ID in query
+    import re
+    numbers_in_query = re.findall(r'\b\d+\b', req.message)
+    student_context = ""
+    for num_str in numbers_in_query:
+        student_id = int(num_str)
+        student = db.query(Student).filter(Student.id == student_id).first()
+        if student:
+            skills = ", ".join([s.get("skill", "") for s in student.skills]) if student.skills else "None recorded"
+            student_context += f"""
+Student Profile Found for ID (Registration Number) {student_id}:
+- Name: {student.name}
+- Email: {student.email}
+- Branch (Section): {student.branch}
+- CGPA: {student.cgpa}
+- 10th %: {student.tenth_pct}%
+- 12th %: {student.twelfth_pct}%
+- Backlogs: {student.backlog_count}
+- Skills: {skills}
+- Expected Salary: {student.expected_salary} LPA
+"""
+    if student_context:
+        system_prompt += f"\n\nHere is some context regarding students mentioned in the query:\n{student_context}"
+
     messages = [{"role": "system", "content": system_prompt}]
     if req.history:
         for msg in req.history[-6:]:
@@ -1275,4 +1334,255 @@ Provide clear, actionable, concise, and professional responses tailored to place
         "reply": reply, 
         "source": "placement_ops_local_ai", 
         "note": "Using Placement Ops built-in domain AI engine. Add a valid Hugging Face API key in settings or .env to connect directly to Hugging Face models."
+    }
+
+# ==========================================
+# AGENT 13 - TALENT DISCOVERY & OPPORTUNITY
+# ==========================================
+
+from backend.models import AgentOutput, HumanReview, ResearchProject, ProjectMember, AuditLog
+import datetime
+
+@app.post("/agents/13/run")
+def run_agent_13(
+    student_id: int, 
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_role("tpo", "faculty", "hod", "principal"))
+):
+    output_id = TalentDiscoveryAgent.run_discovery_for_student(db, student_id, user.profile_id)
+    if not output_id:
+        raise HTTPException(status_code=500, detail="Agent 13 execution failed.")
+    return {"message": "Agent 13 completed successfully", "output_id": str(output_id)}
+
+@app.get("/agents/13/student/{student_id}")
+def get_agent13_student_profile(
+    student_id: int, 
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_role("student", "tpo", "faculty", "hod", "principal"))
+):
+    # Enforce Student Scope: A student can only view their own ID
+    if user.role == "student":
+        student_record = db.query(Student).filter(Student.profile_id == user.profile_id).first()
+        if not student_record or student_record.id != student_id:
+            raise HTTPException(status_code=403, detail="Not authorized to view another student's Agent 13 output.")
+    # Retrieve the latest Agent 13 output for the student
+    output = db.query(AgentOutput).filter(AgentOutput.subject_id == student_id).order_by(AgentOutput.created_at.desc()).first()
+    if not output:
+        raise HTTPException(status_code=404, detail="No Agent 13 recommendations found for this student.")
+    
+    review = db.query(HumanReview).filter(HumanReview.output_id == str(output.output_id)).first()
+    
+    return {
+        "output_id": str(output.output_id),
+        "created_at": output.created_at,
+        "payload": output.payload,
+        "reasoning_summary": output.reasoning_summary,
+        "review_status": review.decision if review else "PENDING"
+    }
+
+from backend.models import FacultyExpertise
+from sqlalchemy import text
+
+@app.get("/agents/13/faculty/discover")
+def get_faculty_discovery_dashboard(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_role("tpo", "faculty", "hod", "principal"))
+):
+    # Retrieve base recommendations
+    query = db.query(AgentOutput, HumanReview, Student).join(
+        HumanReview, AgentOutput.output_id == HumanReview.output_id
+    ).join(
+        Student, AgentOutput.subject_id == Student.id
+    ).order_by(AgentOutput.created_at.desc())
+
+    # Enforce Scopes
+    if user.role == "faculty":
+        faculty = db.query(FacultyExpertise).filter(FacultyExpertise.profile_id == user.profile_id).first()
+        if not faculty:
+            return {"recommendations": []}
+        
+        # Faculty scope: only see recommendations where they are specifically matched in payload
+        # Using raw SQL filter for JSONB inside SQLAlchemy
+        query = query.filter(
+            text(f"payload->'faculty_match_explanations' @> '[{{\"faculty_id\": {faculty.faculty_id}}}]'")
+        )
+        
+    elif user.role == "hod":
+        faculty = db.query(FacultyExpertise).filter(FacultyExpertise.profile_id == user.profile_id).first()
+        if not faculty:
+            return {"recommendations": []}
+        
+        # HOD scope: see all students in their department
+        query = query.filter(Student.branch == faculty.department)
+        
+    # principal and tpo see everything
+
+    outputs = query.limit(50).all()
+
+    results = []
+    for out, rev, stud in outputs:
+        results.append({
+            "output_id": str(out.output_id),
+            "student_id": out.subject_id,
+            "created_at": out.created_at,
+            "reasoning_summary": out.reasoning_summary,
+            "decision": rev.decision
+        })
+    return {"recommendations": results}
+
+class ReviewRequest(BaseModel):
+    decision: str  # APPROVED, MODIFY, REJECTED
+    comments: Optional[str] = None
+
+@app.post("/agents/13/recommendation/{output_id}/review")
+def review_agent13_recommendation(
+    output_id: str,
+    req: ReviewRequest,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_role("tpo", "faculty", "hod", "principal"))
+):
+    if req.decision not in ["APPROVED", "MODIFY", "REJECTED"]:
+        raise HTTPException(status_code=400, detail="Invalid decision.")
+
+    review = db.query(HumanReview).filter(HumanReview.output_id == output_id).first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review record not found.")
+
+    review.decision = req.decision
+    review.reviewed_by = user.profile_id
+    review.reviewed_at = datetime.datetime.utcnow()
+    review.comments = req.comments
+
+    # Audit logging
+    log = AuditLog(
+        action=f"AGENT13_{req.decision}",
+        target_type="agent_output",
+        target_id=1, # Hack for integer field
+        performed_by=user.profile_id,
+        details=f"Output ID {output_id} {req.decision}"
+    )
+    db.add(log)
+    db.commit()
+
+    return {"message": f"Recommendation marked as {req.decision}"}
+
+class ExecuteRequest(BaseModel):
+    project_id: str
+
+@app.post("/agents/13/recommendation/{output_id}/execute")
+def execute_agent13_recommendation(
+    output_id: str,
+    req: ExecuteRequest,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_role("tpo", "faculty", "hod", "principal"))
+):
+    # 1. Verify APPROVED review
+    review = db.query(HumanReview).filter(HumanReview.output_id == output_id).first()
+    if not review or review.decision != "APPROVED":
+        raise HTTPException(status_code=400, detail="Recommendation must be APPROVED before execution.")
+
+    output = db.query(AgentOutput).filter(AgentOutput.output_id == output_id).first()
+    if not output:
+        raise HTTPException(status_code=404, detail="Output record not found.")
+
+    student_id = output.subject_id
+
+    # 2. Verify project active
+    project = db.query(ResearchProject).filter(
+        ResearchProject.project_id == req.project_id,
+        ResearchProject.status == "ACTIVE"
+    ).with_for_update().first() # Row lock for transactional safety
+
+    if not project:
+        review.decision = "EXPIRED"
+        review.comments = "Execution failed: Project inactive."
+        db.commit()
+        raise HTTPException(status_code=400, detail="Execution failed: Project is not ACTIVE. Marked as EXPIRED.")
+
+    # 3. Verify student not already assigned
+    existing_member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == req.project_id,
+        ProjectMember.student_id == student_id
+    ).first()
+    if existing_member:
+        raise HTTPException(status_code=400, detail="Student is already a member of this project.")
+
+    # 4. Verify capacity
+    current_members_count = db.query(ProjectMember).filter(
+        ProjectMember.project_id == req.project_id,
+        ProjectMember.status == "ACTIVE"
+    ).count()
+
+    if current_members_count >= project.capacity:
+        review.decision = "EXPIRED"
+        review.comments = "Execution failed: Project reached capacity."
+        db.commit()
+        raise HTTPException(status_code=400, detail="Execution failed: Project capacity full. Marked as EXPIRED.")
+
+    # 5. Insert to project_member
+    new_member = ProjectMember(
+        project_id=req.project_id,
+        student_id=student_id,
+        role="RESEARCH_ASSISTANT",
+        status="ACTIVE"
+    )
+    db.add(new_member)
+
+    # 6. Audit logging
+    log = AuditLog(
+        action="AGENT13_EXECUTE",
+        target_type="project_member",
+        target_id=student_id,
+        performed_by=user.profile_id,
+        details=f"Assigned student {student_id} to project {req.project_id} based on output {output_id}"
+    )
+    db.add(log)
+    db.commit()
+
+    return {"message": "Execution successful. Student assigned to project."}
+
+@app.get("/agents/13/audit/fairness")
+def get_agent13_fairness_audit(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_role("tpo", "principal"))
+):
+    """
+    Class 3 (Prescriptive Agent) Fairness Audit.
+    Aggregates assignment and recommendation data across branches to detect bias.
+    """
+    from sqlalchemy import func
+    
+    # 1. Total Recommendations
+    total_runs = db.query(AgentOutput).count()
+    
+    # 2. Branch Distribution of Agent Outputs
+    branch_distribution = db.query(
+        Student.branch, 
+        func.count(AgentOutput.output_id).label("count")
+    ).join(Student, AgentOutput.subject_id == Student.id).group_by(Student.branch).all()
+    
+    # 3. Decision Outcomes
+    decision_stats = db.query(
+        HumanReview.decision,
+        func.count(HumanReview.review_id).label("count")
+    ).group_by(HumanReview.decision).all()
+    
+    # 4. Hidden Talent Flags by Branch
+    # This requires querying the v_student_strength_profile or relying on payload extraction
+    # Using JSONB extraction from payload (assuming hidden_talent_explanation exists)
+    hidden_talent_stats = db.query(
+        Student.branch,
+        func.count(AgentOutput.output_id).label("count")
+    ).join(Student, AgentOutput.subject_id == Student.id).filter(
+        AgentOutput.payload['hidden_talent_explanation'].isnot(None)
+    ).group_by(Student.branch).all()
+
+    return {
+        "timestamp": datetime.datetime.utcnow(),
+        "agent_class": "Class 3 (Prescriptive)",
+        "total_recommendations_generated": total_runs,
+        "branch_distribution": {row.branch: row.count for row in branch_distribution},
+        "decision_outcomes": {row.decision: row.count for row in decision_stats},
+        "hidden_talent_identified": {row.branch: row.count for row in hidden_talent_stats},
+        "status": "COMPLIANT" if total_runs > 0 else "NO_DATA"
     }

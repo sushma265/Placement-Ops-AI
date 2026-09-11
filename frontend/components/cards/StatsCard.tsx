@@ -1,13 +1,13 @@
 import type { LucideIcon } from 'lucide-react'
 
 export function StatsCard({
-  label, value, detail, icon: Icon, tone = 'teal',
+  label, value, detail, icon: Icon, tone = 'blue',
 }: {
   label: string
   value: string | number
   detail?: string
   icon: LucideIcon
-  tone?: 'teal' | 'coral'
+  tone?: 'blue' | 'coral'
 }) {
   return (
     <div className="metric-card">

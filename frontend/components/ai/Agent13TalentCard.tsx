@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../../lib/api';
 
 interface Agent13Output {
   output_id: string;
@@ -27,7 +28,7 @@ export default function Agent13TalentCard({ studentId }: { studentId: number }) 
     // For this demonstration, we'll simulate the data load.
     const fetchData = async () => {
       try {
-        const res = await fetch(`http://localhost:8000/agents/13/student/${studentId}`);
+        const res = await apiFetch(`/agents/13/student/${studentId}`);
         if (res.ok) {
           const json = await res.json();
           setData(json);

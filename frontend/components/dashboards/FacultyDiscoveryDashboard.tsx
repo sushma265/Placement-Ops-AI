@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../../lib/api';
 
 interface Recommendation {
   output_id: string;
@@ -8,20 +9,34 @@ interface Recommendation {
   created_at: string;
   reasoning_summary: string;
   decision: string;
+  payload?: {
+    opportunity_explanations: Array<{ project_id: string; rationale: string }>;
+  };
 }
 
 export default function FacultyDiscoveryDashboard() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedProjects, setSelectedProjects] = useState<Record<string, string>>({});
 
   useEffect(() => {
     // In a real app, you would fetch from the API.
     const fetchData = async () => {
       try {
-        const res = await fetch('http://localhost:8000/agents/13/faculty/discover');
+        const res = await apiFetch('/agents/13/faculty/discover');
         if (res.ok) {
           const json = await res.json();
-          setRecommendations(json.recommendations || []);
+          const recs = json.recommendations || [];
+          setRecommendations(recs);
+          
+          // Initialize selected projects with the first available option
+          const initialSelections: Record<string, string> = {};
+          recs.forEach((rec: Recommendation) => {
+            if (rec.payload?.opportunity_explanations?.length) {
+              initialSelections[rec.output_id] = rec.payload.opportunity_explanations[0].project_id;
+            }
+          });
+          setSelectedProjects(initialSelections);
         }
       } catch (err) {
         console.error(err);
@@ -34,7 +49,7 @@ export default function FacultyDiscoveryDashboard() {
 
   const handleReview = async (output_id: string, decision: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/agents/13/recommendation/${output_id}/review`, {
+      const res = await apiFetch(`/agents/13/recommendation/${output_id}/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ decision, comments: '' })
@@ -48,9 +63,13 @@ export default function FacultyDiscoveryDashboard() {
     }
   };
 
-  const handleExecute = async (output_id: string, project_id: string = "mock-project-id") => {
+  const handleExecute = async (output_id: string, project_id: string) => {
+    if (!project_id) {
+      alert("Please select a project first.");
+      return;
+    }
     try {
-      const res = await fetch(`http://localhost:8000/agents/13/recommendation/${output_id}/execute`, {
+      const res = await apiFetch(`/agents/13/recommendation/${output_id}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ project_id })
@@ -101,9 +120,24 @@ export default function FacultyDiscoveryDashboard() {
                 </>
               )}
               {rec.decision === 'APPROVED' && (
-                <button onClick={() => handleExecute(rec.output_id)} className="w-full px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition shadow-sm font-semibold">
-                  Execute Assignment
-                </button>
+                <div className="flex flex-col gap-2">
+                  <select 
+                    className="w-full border border-gray-300 rounded p-1.5 text-xs text-gray-700"
+                    value={selectedProjects[rec.output_id] || ''}
+                    onChange={(e) => setSelectedProjects(prev => ({...prev, [rec.output_id]: e.target.value}))}
+                  >
+                    {rec.payload?.opportunity_explanations?.length ? (
+                      rec.payload.opportunity_explanations.map(opt => (
+                        <option key={opt.project_id} value={opt.project_id}>{opt.project_id}</option>
+                      ))
+                    ) : (
+                      <option value="">No projects found</option>
+                    )}
+                  </select>
+                  <button onClick={() => handleExecute(rec.output_id, selectedProjects[rec.output_id])} className="w-full px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition shadow-sm font-semibold">
+                    Execute Assignment
+                  </button>
+                </div>
               )}
             </div>
           </div>

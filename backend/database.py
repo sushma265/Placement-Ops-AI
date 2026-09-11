@@ -1,7 +1,7 @@
 import os
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # 1. Check if DATABASE_URL is set in environment (e.g. on Render/Heroku)
@@ -87,6 +87,18 @@ def init_db():
         importlib.import_module("backend.models")
     except Exception:
         pass
+
+    # Agent 13 models use custom Postgres schemas. CREATE SCHEMA IF NOT EXISTS
+    # is idempotent — safe to run on every startup. Must happen before
+    # create_all so Postgres doesn't reject the CREATE TABLE statements.
+    agent13_schemas = [
+        "studentlife", "curriculum", "people", "research", "agentops", "outcomes"
+    ]
+    with engine.connect() as conn:
+        for schema in agent13_schemas:
+            conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
+        conn.commit()
+
     Base.metadata.create_all(bind=engine)
     print("Database: tables verified/created via Base.metadata.create_all")
 

@@ -1421,12 +1421,19 @@ def get_faculty_discovery_dashboard(
 
     results = []
     for out, rev, stud in outputs:
+        # Include opportunity_explanations from the stored payload so the
+        # frontend can offer a real project_id selector on the Execute button
+        # instead of guessing or hardcoding a placeholder.
+        payload_data = out.payload if isinstance(out.payload, dict) else {}
         results.append({
             "output_id": str(out.output_id),
             "student_id": out.subject_id,
             "created_at": out.created_at,
             "reasoning_summary": out.reasoning_summary,
-            "decision": rev.decision
+            "decision": rev.decision,
+            "payload": {
+                "opportunity_explanations": payload_data.get("opportunity_explanations", [])
+            }
         })
     return {"recommendations": results}
 

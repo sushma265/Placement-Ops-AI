@@ -1,3 +1,4 @@
+import uuid
 import datetime
 from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
@@ -213,7 +214,7 @@ class StudentInterest(Base):
     __tablename__ = "student_interest"
     __table_args__ = {"schema": "studentlife"}
     student_interest_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    student_id = Column(Integer, ForeignKey("public.students.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     area = Column(String, nullable=False)
     declared_at = Column(DateTime, default=datetime.datetime.utcnow)
 
@@ -228,7 +229,7 @@ class ResumeClaim(Base):
     __tablename__ = "resume_claim"
     __table_args__ = {"schema": "studentlife"}
     claim_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    student_id = Column(Integer, ForeignKey("public.students.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     claim_type = Column(String, nullable=False)
     description = Column(Text, nullable=False)
     domain = Column(String, nullable=False)
@@ -243,7 +244,7 @@ class FacultyExpertise(Base):
     __tablename__ = "faculty_expertise"
     __table_args__ = {"schema": "people"}
     faculty_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    profile_id = Column(String, ForeignKey("public.profile_roles.profile_id"), unique=True, nullable=False)
+    profile_id = Column(String, ForeignKey("profile_roles.profile_id"), unique=True, nullable=False)
     name = Column(String, nullable=False)
     department = Column(String, nullable=False)
     research_areas = Column(JSON, default=list)
@@ -277,7 +278,7 @@ class ProjectMember(Base):
     __table_args__ = {"schema": "research"}
     membership_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     project_id = Column(String, ForeignKey("research.project.project_id", ondelete="CASCADE"), nullable=False)
-    student_id = Column(Integer, ForeignKey("public.students.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     role = Column(String, default="RESEARCH_ASSISTANT")
     status = Column(String, default="ACTIVE")
     assigned_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -290,7 +291,7 @@ class AgentRun(Base):
     __table_args__ = {"schema": "agentops"}
     run_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     agent_code = Column(String, default="A13_FAST_LEARNER")
-    triggered_by = Column(String, ForeignKey("public.profile_roles.profile_id"), nullable=False)
+    triggered_by = Column(String, ForeignKey("profile_roles.profile_id"), nullable=False)
     status = Column(String, default="STARTED")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
@@ -308,7 +309,7 @@ class AgentOutput(Base):
     output_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     run_id = Column(String, ForeignKey("agentops.agent_run.run_id", ondelete="CASCADE"), nullable=False)
     subject_type = Column(String, default="STUDENT")
-    subject_id = Column(Integer, ForeignKey("public.students.id"), nullable=False)
+    subject_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     payload = Column(JSON, nullable=False)
     reasoning_summary = Column(Text, nullable=False)
     confidence = Column(Float, nullable=False)
@@ -320,6 +321,6 @@ class HumanReview(Base):
     review_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     output_id = Column(String, ForeignKey("agentops.agent_output.output_id", ondelete="CASCADE"), nullable=False)
     decision = Column(String, default="PENDING")
-    reviewed_by = Column(String, ForeignKey("public.profile_roles.profile_id"), nullable=True)
+    reviewed_by = Column(String, ForeignKey("profile_roles.profile_id"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
     comments = Column(Text, nullable=True)

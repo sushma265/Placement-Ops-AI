@@ -72,16 +72,28 @@ relative_stats AS (
     FROM weighted_domain_scores
     GROUP BY branch, domain
 ),
+-- Deduplicate to one row per student for a clean cgpa percentile ranking.
+-- weighted_domain_scores has 5 rows per student (one per domain), which would
+-- inflate the PERCENT_RANK window.  This CTE collapses to 1 row per student.
+student_cgpa_percentiles AS (
+    SELECT DISTINCT
+        student_id,
+        branch,
+        cgpa,
+        PERCENT_RANK() OVER (PARTITION BY branch ORDER BY cgpa) AS cgpa_percentile
+    FROM weighted_domain_scores
+),
 student_percentiles AS (
     SELECT 
         w.student_id,
         w.branch,
         w.domain,
-        w.cgpa,
+        scp.cgpa,
         w.domain_score,
         PERCENT_RANK() OVER (PARTITION BY w.branch, w.domain ORDER BY w.domain_score) AS domain_percentile,
-        PERCENT_RANK() OVER (PARTITION BY w.branch ORDER BY w.cgpa) AS cgpa_percentile
+        scp.cgpa_percentile
     FROM weighted_domain_scores w
+    JOIN student_cgpa_percentiles scp ON w.student_id = scp.student_id
 ),
 growth_baseline AS (
     SELECT 

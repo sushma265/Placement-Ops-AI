@@ -53,12 +53,12 @@ class TalentDiscoveryAgent:
         db.refresh(run)
 
         # 2. Query Deterministic SQL Views
-        strength_profile = db.execute(
+        strength_rows = db.execute(
             text("SELECT * FROM outcomes.v_student_strength_profile WHERE student_id = :sid"),
             {"sid": student_id}
-        ).fetchone()
+        ).fetchall()
 
-        if not strength_profile:
+        if not strength_rows:
             run.status = "FAILED - STUDENT NOT FOUND"
             db.commit()
             return None
@@ -73,20 +73,23 @@ class TalentDiscoveryAgent:
             {"sid": student_id}
         ).fetchall()
 
+        first = strength_rows[0]
+
         # Build Context Snapshot
         context_snapshot = {
             "student": {
-                "id": strength_profile.student_id,
-                "branch": strength_profile.branch,
-                "cgpa": float(strength_profile.cgpa) if strength_profile.cgpa else None,
-                "cgpa_percentile": float(strength_profile.cgpa_percentile) if strength_profile.cgpa_percentile else None
+                "id": first.student_id,
+                "branch": first.branch,
+                "cgpa": float(first.cgpa) if first.cgpa else None,
+                "cgpa_percentile": float(first.cgpa_percentile) if first.cgpa_percentile else None
             },
             "scores": {
-                strength_profile.domain: float(strength_profile.domain_score)
+                row.domain: float(row.domain_score) for row in strength_rows
             },
             "flags": {
-                "is_hidden_talent": strength_profile.is_hidden_talent,
-                "growth_status": strength_profile.growth_status
+                "is_hidden_talent": any(row.is_hidden_talent for row in strength_rows),
+                "hidden_talent_domains": [row.domain for row in strength_rows if row.is_hidden_talent],
+                "growth_status": first.growth_status
             },
             "eligible_opportunities": [
                 {

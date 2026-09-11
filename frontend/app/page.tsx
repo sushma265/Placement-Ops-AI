@@ -86,11 +86,14 @@ export default function Page() {
       console.error('Failed to load profile:', e);
     }
 
-    const role = profile?.role || 'student';
+    let role = profile?.role || 'student';
     
     // Automatically sync profile with backend to prevent "No profile on file"
     try {
-      await syncProfile(role);
+      const synced = await syncProfile(role);
+      if (synced && synced.role) {
+        role = synced.role;
+      }
     } catch (err) {
       console.warn('Failed to sync profile during session restore:', err);
     }
@@ -337,7 +340,7 @@ function Landing({ onOpen }: { onOpen: () => void }) {
 // SCREEN 2: AUTHENTICATION / LOGIN GATE
 // ----------------------------------------------------
 function LoginGate({ onLoginSuccess, onBack }: { onLoginSuccess: (user: any) => void; onBack: () => void }) {
-  const [role, setRole] = useState<Role>('tpo');
+  const [role, setRole] = useState<Role>('student');
   const [isSignUp, setIsSignUp] = useState(false);
   const [useDemoLogin, setUseDemoLogin] = useState(false);
 

@@ -54,6 +54,7 @@ export function StudentDashboard({ user, onLogout }: { user: any; onLogout: () =
       .finally(() => setLoading(false))
   }
 
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       const session = data.session
@@ -61,7 +62,43 @@ export function StudentDashboard({ user, onLogout }: { user: any; onLogout: () =
       if (session) {
         reload()
       } else {
-        // Demo login — no real session, backend calls would return 401
+        // Demo login — populate with mock data so the dashboard is still usable
+        const demoProfile = user?.user || {}
+        setData({
+          student: {
+            id: demoProfile.id || 'demo-student',
+            name: demoProfile.name || 'Aditya Sharma',
+            email: demoProfile.email || 'aditya.sharma@example.com',
+            branch: demoProfile.branch || 'CSE',
+            cgpa: demoProfile.cgpa ?? 9.2,
+            api_score: demoProfile.api_score ?? 91.2,
+            ssi_score: demoProfile.ssi_score ?? 80.0,
+            prs_score: demoProfile.prs_score ?? 75.0,
+            backlogs: 0,
+            placement_status: 'eligible',
+          },
+          eligible_drives: [
+            { id: 1, company_name: 'Acme Systems', role_title: 'Software Engineer', cgpa_cutoff: 8.0, status: 'published', stage: 'matching', created_at: '2026-08-20T10:00:00Z' },
+            { id: 2, company_name: 'TechCorp', role_title: 'Data Analyst', cgpa_cutoff: 7.5, status: 'published', stage: 'eligibility', created_at: '2026-08-21T09:00:00Z' },
+            { id: 3, company_name: 'Northstar Labs', role_title: 'Product Intern', cgpa_cutoff: 7.0, status: 'published', stage: 'eligibility', created_at: '2026-08-19T08:30:00Z' },
+          ],
+          applications: [],
+          upcoming_interviews: [],
+          notifications: [],
+          activity: [],
+        } as any)
+        setProfile({
+          id: demoProfile.id || 'demo-student',
+          name: demoProfile.name || 'Aditya Sharma',
+          email: demoProfile.email || 'aditya.sharma@example.com',
+          branch: demoProfile.branch || 'CSE',
+          cgpa: demoProfile.cgpa ?? 9.2,
+          api_score: demoProfile.api_score ?? 91.2,
+          ssi_score: demoProfile.ssi_score ?? 80.0,
+          prs_score: demoProfile.prs_score ?? 75.0,
+          backlogs: 0,
+          placement_status: 'eligible',
+        } as any)
         setLoading(false)
       }
     }).catch(() => {
@@ -88,33 +125,6 @@ export function StudentDashboard({ user, onLogout }: { user: any; onLogout: () =
               Loading dashboard for {user.user.name}…
             </span>
           )}
-        </div>
-      </div>
-    )
-  }
-
-  // No Supabase session — demo login, cannot call authenticated backend APIs
-  if (hasSession === false) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="max-w-md w-full bg-card border border-border rounded-2xl p-8 text-center shadow-2xl">
-          <ShieldAlert className="mx-auto mb-4 text-amber-400" size={40} />
-          <h2 className="text-lg font-bold mb-2">Sign in required</h2>
-          <p className="text-sm text-muted-foreground mb-6">
-            The Student Dashboard requires a real account. Demo mode cannot call
-            the protected backend APIs (/students/me and /students/me/dashboard)
-            without a valid Supabase JWT.
-          </p>
-          <p className="text-xs text-muted-foreground mb-6">
-            Please go back and sign up or sign in with your email + password or
-            a social provider (Google, GitHub, LinkedIn).
-          </p>
-          <button
-            className="btn btn-primary w-full"
-            onClick={onLogout}
-          >
-            ← Back to Login
-          </button>
         </div>
       </div>
     )

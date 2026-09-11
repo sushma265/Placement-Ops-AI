@@ -1,10 +1,6 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle, XCircle, BrainCircuit, PlayCircle, AlertTriangle } from 'lucide-react';
 import { 
   getAgent13Recommendations, 
@@ -12,13 +8,14 @@ import {
   executeAgent13Recommendation,
   getAgent13FairnessAudit,
   Agent13Recommendation 
-} from '@/lib/student-api';
+} from '../../lib/student-api';
 
 export default function FacultyDiscoveryDashboard() {
   const [recommendations, setRecommendations] = useState<Agent13Recommendation[]>([]);
   const [auditData, setAuditData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('pending');
 
   useEffect(() => {
     loadData();
@@ -63,10 +60,8 @@ export default function FacultyDiscoveryDashboard() {
   
   if (error) return (
     <div className="p-8 max-w-5xl mx-auto space-y-6">
-      <Card className="border-red-500 bg-red-500/10">
-        <CardContent className="p-6 text-red-400 font-semibold">{error}</CardContent>
-      </Card>
-      <Button onClick={() => loadData()}>Retry</Button>
+      <div className="border border-red-500 bg-red-500/10 p-6 rounded-lg text-red-400 font-semibold">{error}</div>
+      <button className="px-4 py-2 bg-gray-800 text-white rounded" onClick={() => loadData()}>Retry</button>
     </div>
   );
 
@@ -82,69 +77,87 @@ export default function FacultyDiscoveryDashboard() {
           <BrainCircuit className="h-8 w-8 text-purple-500" />
           Agent 13 — Talent Discovery
         </h1>
-        <p className="text-muted-foreground max-w-2xl">
+        <p className="text-gray-500 max-w-2xl">
           Discovers hidden student potential and matches them with evidence-backed non-placement opportunities (Research, Hackathons, Mentorship). Every action requires human approval.
         </p>
       </div>
 
-      <Tabs defaultValue="pending" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 max-w-3xl mb-8 bg-zinc-900 border border-white/10">
-          <TabsTrigger value="pending">Pending ({pendingRecs.length})</TabsTrigger>
-          <TabsTrigger value="approved">Ready ({approvedRecs.length})</TabsTrigger>
-          <TabsTrigger value="history">History ({executedRecs.length + rejectedRecs.length})</TabsTrigger>
-          <TabsTrigger value="audit">Fairness Audit</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="pending" className="space-y-4">
-          {pendingRecs.length === 0 ? (
-            <div className="text-center p-12 border border-dashed rounded-xl border-white/20 text-muted-foreground">
-              No pending recommendations.
-            </div>
-          ) : (
-            pendingRecs.map(rec => (
-              <RecommendationCard key={rec.id} rec={rec} onApprove={() => handleReview(rec.id, 'APPROVED')} onReject={() => handleReview(rec.id, 'REJECTED')} />
-            ))
-          )}
-        </TabsContent>
-
-        <TabsContent value="approved" className="space-y-4">
-          {approvedRecs.length === 0 ? (
-            <div className="text-center p-12 border border-dashed rounded-xl border-white/20 text-muted-foreground">
-              No approved recommendations waiting for execution.
-            </div>
-          ) : (
-            approvedRecs.map(rec => (
-              <RecommendationCard key={rec.id} rec={rec} onExecute={() => handleExecute(rec.id)} showExecute />
-            ))
-          )}
-        </TabsContent>
-
-        <TabsContent value="history" className="space-y-4">
-          {[...executedRecs, ...rejectedRecs].map(rec => (
-            <RecommendationCard key={rec.id} rec={rec} readonly />
+      <div className="w-full">
+        <div className="grid w-full grid-cols-4 max-w-3xl mb-8 bg-gray-100 dark:bg-zinc-900 border border-gray-200 dark:border-white/10 rounded-lg p-1">
+          {['pending', 'approved', 'history', 'audit'].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                activeTab === tab ? 'bg-white dark:bg-zinc-800 shadow' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              {tab === 'pending' ? `Pending (${pendingRecs.length})` :
+               tab === 'approved' ? `Ready (${approvedRecs.length})` :
+               tab === 'history' ? `History (${executedRecs.length + rejectedRecs.length})` :
+               'Fairness Audit'}
+            </button>
           ))}
-        </TabsContent>
+        </div>
 
-        <TabsContent value="audit" className="space-y-4">
-          <Card className="bg-zinc-900/50 border-white/10">
-            <CardHeader>
-              <CardTitle>Fairness & Bias Audit</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <pre className="p-4 bg-black/50 rounded-lg overflow-auto text-sm text-blue-300 border border-white/5">
-                {JSON.stringify(auditData, null, 2)}
-              </pre>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+        {activeTab === 'pending' && (
+          <div className="space-y-4">
+            {pendingRecs.length === 0 ? (
+              <div className="text-center p-12 border border-dashed rounded-xl border-gray-300 dark:border-white/20 text-gray-500">
+                No pending recommendations.
+              </div>
+            ) : (
+              pendingRecs.map(rec => (
+                <RecommendationCard key={rec.id} rec={rec} onApprove={() => handleReview(rec.id, 'APPROVED')} onReject={() => handleReview(rec.id, 'REJECTED')} />
+              ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'approved' && (
+          <div className="space-y-4">
+            {approvedRecs.length === 0 ? (
+              <div className="text-center p-12 border border-dashed rounded-xl border-gray-300 dark:border-white/20 text-gray-500">
+                No approved recommendations waiting for execution.
+              </div>
+            ) : (
+              approvedRecs.map(rec => (
+                <RecommendationCard key={rec.id} rec={rec} onExecute={() => handleExecute(rec.id)} showExecute />
+              ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'history' && (
+          <div className="space-y-4">
+            {[...executedRecs, ...rejectedRecs].map(rec => (
+              <RecommendationCard key={rec.id} rec={rec} readonly />
+            ))}
+          </div>
+        )}
+
+        {activeTab === 'audit' && (
+          <div className="space-y-4">
+            <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-200 dark:border-white/10 rounded-xl">
+              <div className="p-6 border-b border-gray-200 dark:border-white/10">
+                <h3 className="text-xl font-semibold">Fairness & Bias Audit</h3>
+              </div>
+              <div className="p-6">
+                <pre className="p-4 bg-gray-100 dark:bg-black/50 rounded-lg overflow-auto text-sm text-blue-800 dark:text-blue-300 border border-gray-200 dark:border-white/5">
+                  {JSON.stringify(auditData, null, 2)}
+                </pre>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function RecommendationCard({ rec, onApprove, onReject, onExecute, showExecute, readonly }: any) {
   return (
-    <Card className="bg-zinc-900/50 border-white/10 overflow-hidden relative">
+    <div className="bg-white dark:bg-zinc-900/50 border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden relative shadow-sm">
       {rec.hidden_talent && (
         <div className="absolute top-0 right-0 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1 shadow-lg shadow-purple-500/20">
           <BrainCircuit className="h-3 w-3" /> Hidden Talent Identified
@@ -154,55 +167,55 @@ function RecommendationCard({ rec, onApprove, onReject, onExecute, showExecute, 
         <div className="flex justify-between items-start mb-4">
           <div>
             <h3 className="text-xl font-semibold mb-1">{rec.student_name} → {rec.opportunity_title}</h3>
-            <div className="flex gap-2 text-sm text-muted-foreground">
-              <Badge variant="outline" className="bg-white/5">{rec.status}</Badge>
+            <div className="flex gap-2 text-sm text-gray-500">
+              <span className="px-2 py-0.5 border rounded bg-gray-50 dark:bg-white/5">{rec.status}</span>
               <span className="flex items-center gap-1"><BrainCircuit className="h-3 w-3"/> Fit Score: {rec.fit_score.toFixed(1)}</span>
             </div>
           </div>
           {!readonly && !showExecute && (
             <div className="flex gap-2 mt-4 sm:mt-0">
-              <Button variant="outline" className="border-red-500/50 hover:bg-red-500/20 text-red-400" onClick={onReject}>
+              <button className="px-4 py-2 border border-red-500/50 hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded-md flex items-center transition" onClick={onReject}>
                 <XCircle className="h-4 w-4 mr-2" /> Reject
-              </Button>
-              <Button variant="default" className="bg-green-600 hover:bg-green-500 text-white" onClick={onApprove}>
+              </button>
+              <button className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-md flex items-center transition" onClick={onApprove}>
                 <CheckCircle className="h-4 w-4 mr-2" /> Approve
-              </Button>
+              </button>
             </div>
           )}
           {showExecute && (
-             <Button variant="default" className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20" onClick={onExecute}>
+             <button className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md flex items-center shadow-lg shadow-blue-500/20 transition" onClick={onExecute}>
                <PlayCircle className="h-4 w-4 mr-2" /> Execute (ACT_WITH_APPROVAL)
-             </Button>
+             </button>
           )}
         </div>
 
         {rec.hidden_talent && rec.hidden_talent_explanation && (
-          <div className="mb-6 p-4 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-200 text-sm">
+          <div className="mb-6 p-4 rounded-lg bg-purple-100 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/20 text-purple-800 dark:text-purple-200 text-sm">
             <strong>Agent 13 Reasoning:</strong> {rec.hidden_talent_explanation}
           </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div className="space-y-2">
-            <h4 className="font-semibold text-zinc-300 flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-green-400" /> Verified Evidence (Weight: 1.0)
+            <h4 className="font-semibold text-gray-800 dark:text-zinc-300 flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-green-500 dark:text-green-400" /> Verified Evidence (Weight: 1.0)
             </h4>
-            <ul className="list-disc pl-5 text-muted-foreground space-y-1">
+            <ul className="list-disc pl-5 text-gray-600 dark:text-gray-400 space-y-1">
               {rec.evidence_breakdown?.verified?.map((ev: string, i: number) => <li key={i}>{ev}</li>)}
-              {!rec.evidence_breakdown?.verified?.length && <li className="text-zinc-600 italic">None</li>}
+              {!rec.evidence_breakdown?.verified?.length && <li className="text-gray-400 dark:text-zinc-600 italic">None</li>}
             </ul>
           </div>
           <div className="space-y-2">
-            <h4 className="font-semibold text-zinc-300 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-400" /> Provisional Claims (Weight: 0.3)
+            <h4 className="font-semibold text-gray-800 dark:text-zinc-300 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500 dark:text-amber-400" /> Provisional Claims (Weight: 0.3)
             </h4>
-            <ul className="list-disc pl-5 text-muted-foreground space-y-1">
+            <ul className="list-disc pl-5 text-gray-600 dark:text-gray-400 space-y-1">
               {rec.evidence_breakdown?.provisional?.map((ev: string, i: number) => <li key={i}>{ev}</li>)}
-              {!rec.evidence_breakdown?.provisional?.length && <li className="text-zinc-600 italic">None</li>}
+              {!rec.evidence_breakdown?.provisional?.length && <li className="text-gray-400 dark:text-zinc-600 italic">None</li>}
             </ul>
           </div>
         </div>
       </div>
-    </Card>
+    </div>
   );
 }

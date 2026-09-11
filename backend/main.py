@@ -382,6 +382,32 @@ def analyze_my_resume(
     student.resume_ats_score = result.get("ats_score")
     student.resume_analysis = result
     student.resume_analyzed_at = datetime.datetime.utcnow()
+    
+    # --- Agent 13 Integration: Extract claims to resume_claim ---
+    # First, clear old unverified claims for this document so we don't duplicate on re-analysis
+    from backend.models import ResumeClaim
+    db.query(ResumeClaim).filter(
+        ResumeClaim.student_id == student.id,
+        ResumeClaim.verification_status == "PROVISIONAL"
+    ).delete()
+    
+    extracted_categories = result.get("extracted_skills", {})
+    source = result.get("source", "unknown")
+    confidence = 0.8 if source == "huggingface" else 0.5
+    
+    for category, skills in extracted_categories.items():
+        for skill in skills:
+            claim = ResumeClaim(
+                student_id=student.id,
+                claim_type="SKILL",
+                claim_text=f"Claims proficiency in {skill}",
+                normalized_skill=skill.lower(),
+                source_document_id=student.resume_filename,
+                extraction_confidence=confidence,
+                verification_status="PROVISIONAL"
+            )
+            db.add(claim)
+    
     db.commit()
 
     db.add(AuditLog(
@@ -389,7 +415,7 @@ def analyze_my_resume(
         target_type="student",
         target_id=student.id,
         performed_by=student.email,
-        details=f"source={result.get('source')}",
+        details=f"source={result.get('source')}, claims_extracted={sum(len(v) for v in extracted_categories.values())}",
     ))
     db.commit()
 
@@ -1419,177 +1445,162 @@ def get_faculty_discovery_dashboard(
 
     outputs = query.limit(50).all()
 
+# ==============================================================================
+# AGENT 13 - NEW API ENDPOINTS
+# ==============================================================================
+from backend.models import ResumeClaim, Agent13Recommendation
+
+@app.get("/api/agent13/recommendations")
+def get_agent13_recommendations(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_role("tpo", "faculty", "principal"))
+):
+    recs = db.query(Agent13Recommendation).all()
     results = []
-    for out, rev, stud in outputs:
-        # Include opportunity_explanations from the stored payload so the
-        # frontend can offer a real project_id selector on the Execute button
-        # instead of guessing or hardcoding a placeholder.
-        payload_data = out.payload if isinstance(out.payload, dict) else {}
+    for r in recs:
+        student = db.query(Student).filter(Student.id == r.student_id).first()
+        opp = db.query(ResearchProject).filter(ResearchProject.project_id == r.opportunity_id).first()
         results.append({
-            "output_id": str(out.output_id),
-            "student_id": out.subject_id,
-            "created_at": out.created_at,
-            "reasoning_summary": out.reasoning_summary,
-            "decision": rev.decision,
-            "payload": {
-                "opportunity_explanations": payload_data.get("opportunity_explanations", [])
-            }
+            "id": r.recommendation_id,
+            "student_name": student.name if student else "Unknown",
+            "opportunity_title": opp.title if opp else "Unknown",
+            "status": r.status,
+            "fit_score": r.fit_score,
+            "hidden_talent": r.hidden_talent,
+            "hidden_talent_explanation": r.hidden_talent_explanation,
+            "evidence_breakdown": r.evidence_breakdown,
+            "created_at": r.created_at
         })
     return {"recommendations": results}
 
-class ReviewRequest(BaseModel):
-    decision: str  # APPROVED, MODIFY, REJECTED
-    comments: Optional[str] = None
+class VerifyClaimRequest(BaseModel):
+    decision: str # VERIFIED or REJECTED
 
-@app.post("/agents/13/recommendation/{output_id}/review")
-def review_agent13_recommendation(
-    output_id: str,
-    req: ReviewRequest,
+@app.post("/api/agent13/resume-claims/{claim_id}/verify")
+def verify_resume_claim(
+    claim_id: str,
+    req: VerifyClaimRequest,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_role("tpo", "faculty", "hod", "principal"))
+    user: CurrentUser = Depends(require_role("tpo", "faculty", "principal"))
 ):
-    if req.decision not in ["APPROVED", "MODIFY", "REJECTED"]:
-        raise HTTPException(status_code=400, detail="Invalid decision.")
+    if req.decision not in ["VERIFIED", "REJECTED"]:
+        raise HTTPException(status_code=400, detail="Decision must be VERIFIED or REJECTED")
 
-    review = db.query(HumanReview).filter(HumanReview.output_id == output_id).first()
-    if not review:
-        raise HTTPException(status_code=404, detail="Review record not found.")
+    claim = db.query(ResumeClaim).filter(ResumeClaim.resume_claim_id == claim_id).first()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
 
-    review.decision = req.decision
-    review.reviewed_by = user.profile_id
-    review.reviewed_at = datetime.datetime.utcnow()
-    review.comments = req.comments
+    # Prevent REJECTED -> VERIFIED without proper override logic
+    if claim.verification_status == "REJECTED" and req.decision == "VERIFIED":
+        raise HTTPException(status_code=400, detail="Cannot verify a previously rejected claim directly.")
 
-    # Audit logging
-    log = AuditLog(
-        action=f"AGENT13_{req.decision}",
-        target_type="agent_output",
-        target_id=1, # Hack for integer field
-        performed_by=user.profile_id,
-        details=f"Output ID {output_id} {req.decision}"
-    )
-    db.add(log)
+    claim.verification_status = req.decision
+    claim.verified_by = user.profile_id
+    claim.verified_at = datetime.datetime.utcnow()
     db.commit()
+    
+    return {"message": f"Claim marked as {req.decision}"}
 
-    return {"message": f"Recommendation marked as {req.decision}"}
+class ReviewRecommendationRequest(BaseModel):
+    decision: str # APPROVED or REJECTED
 
-class ExecuteRequest(BaseModel):
-    project_id: str
-
-@app.post("/agents/13/recommendation/{output_id}/execute")
-def execute_agent13_recommendation(
-    output_id: str,
-    req: ExecuteRequest,
+@app.post("/api/agent13/recommendations/{id}/review")
+def review_agent13_recommendation(
+    id: str,
+    req: ReviewRecommendationRequest,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_role("tpo", "faculty", "hod", "principal"))
+    user: CurrentUser = Depends(require_role("tpo", "faculty", "principal"))
 ):
-    # 1. Verify APPROVED review
-    review = db.query(HumanReview).filter(HumanReview.output_id == output_id).first()
-    if not review or review.decision != "APPROVED":
-        raise HTTPException(status_code=400, detail="Recommendation must be APPROVED before execution.")
+    if req.decision not in ["APPROVED", "REJECTED"]:
+        raise HTTPException(status_code=400, detail="Decision must be APPROVED or REJECTED")
 
-    output = db.query(AgentOutput).filter(AgentOutput.output_id == output_id).first()
-    if not output:
-        raise HTTPException(status_code=404, detail="Output record not found.")
+    rec = db.query(Agent13Recommendation).filter(Agent13Recommendation.recommendation_id == id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Recommendation not found")
 
-    student_id = output.subject_id
+    rec.status = req.decision
+    rec.updated_at = datetime.datetime.utcnow()
+    db.commit()
+    
+    return {"message": f"Recommendation {req.decision}"}
 
-    # 2. Verify project active
+@app.post("/api/agent13/recommendations/{id}/execute")
+def execute_agent13_recommendation(
+    id: str,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_role("tpo", "faculty", "principal"))
+):
+    # Action Gate check
+    rec = db.query(Agent13Recommendation).filter(Agent13Recommendation.recommendation_id == id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Recommendation not found")
+        
+    if rec.status != "APPROVED":
+        raise HTTPException(status_code=400, detail="Recommendation must be APPROVED before execution. (ACT_WITH_APPROVAL constraint)")
+
     project = db.query(ResearchProject).filter(
-        ResearchProject.project_id == req.project_id,
+        ResearchProject.project_id == rec.opportunity_id,
         ResearchProject.status == "ACTIVE"
-    ).with_for_update().first() # Row lock for transactional safety
+    ).with_for_update().first()
 
     if not project:
-        review.decision = "EXPIRED"
-        review.comments = "Execution failed: Project inactive."
-        db.commit()
-        raise HTTPException(status_code=400, detail="Execution failed: Project is not ACTIVE. Marked as EXPIRED.")
+        raise HTTPException(status_code=400, detail="Execution failed: Project is not ACTIVE.")
 
-    # 3. Verify student not already assigned
     existing_member = db.query(ProjectMember).filter(
-        ProjectMember.project_id == req.project_id,
-        ProjectMember.student_id == student_id
+        ProjectMember.project_id == rec.opportunity_id,
+        ProjectMember.student_id == rec.student_id
     ).first()
+    
     if existing_member:
-        raise HTTPException(status_code=400, detail="Student is already a member of this project.")
-
-    # 4. Verify capacity
-    current_members_count = db.query(ProjectMember).filter(
-        ProjectMember.project_id == req.project_id,
-        ProjectMember.status == "ACTIVE"
-    ).count()
-
-    if current_members_count >= project.capacity:
-        review.decision = "EXPIRED"
-        review.comments = "Execution failed: Project reached capacity."
+        rec.status = "EXECUTED"
         db.commit()
-        raise HTTPException(status_code=400, detail="Execution failed: Project capacity full. Marked as EXPIRED.")
+        return {"message": "Execution successful (student was already a member)."}
 
-    # 5. Insert to project_member
+    # Insert to project_member
     new_member = ProjectMember(
-        project_id=req.project_id,
-        student_id=student_id,
+        project_id=rec.opportunity_id,
+        student_id=rec.student_id,
         role="RESEARCH_ASSISTANT",
         status="ACTIVE"
     )
     db.add(new_member)
-
-    # 6. Audit logging
-    log = AuditLog(
-        action="AGENT13_EXECUTE",
-        target_type="project_member",
-        target_id=student_id,
-        performed_by=user.profile_id,
-        details=f"Assigned student {student_id} to project {req.project_id} based on output {output_id}"
-    )
-    db.add(log)
+    
+    rec.status = "EXECUTED"
     db.commit()
 
-    return {"message": "Execution successful. Student assigned to project."}
+    return {"message": "Execution successful. Student assigned to opportunity."}
 
-@app.get("/agents/13/audit/fairness")
+@app.get("/api/agent13/audit/fairness")
 def get_agent13_fairness_audit(
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(require_role("tpo", "principal"))
 ):
-    """
-    Class 3 (Prescriptive Agent) Fairness Audit.
-    Aggregates assignment and recommendation data across branches to detect bias.
-    """
     from sqlalchemy import func
     
-    # 1. Total Recommendations
-    total_runs = db.query(AgentOutput).count()
+    total_recs = db.query(Agent13Recommendation).count()
     
-    # 2. Branch Distribution of Agent Outputs
     branch_distribution = db.query(
         Student.branch, 
-        func.count(AgentOutput.output_id).label("count")
-    ).join(Student, AgentOutput.subject_id == Student.id).group_by(Student.branch).all()
+        func.count(Agent13Recommendation.recommendation_id).label("count")
+    ).join(Student, Agent13Recommendation.student_id == Student.id).group_by(Student.branch).all()
     
-    # 3. Decision Outcomes
     decision_stats = db.query(
-        HumanReview.decision,
-        func.count(HumanReview.review_id).label("count")
-    ).group_by(HumanReview.decision).all()
+        Agent13Recommendation.status,
+        func.count(Agent13Recommendation.recommendation_id).label("count")
+    ).group_by(Agent13Recommendation.status).all()
     
-    # 4. Hidden Talent Flags by Branch
-    # This requires querying the v_student_strength_profile or relying on payload extraction
-    # Using JSONB extraction from payload (assuming hidden_talent_explanation exists)
     hidden_talent_stats = db.query(
         Student.branch,
-        func.count(AgentOutput.output_id).label("count")
-    ).join(Student, AgentOutput.subject_id == Student.id).filter(
-        AgentOutput.payload['hidden_talent_explanation'].isnot(None)
+        func.count(Agent13Recommendation.recommendation_id).label("count")
+    ).join(Student, Agent13Recommendation.student_id == Student.id).filter(
+        Agent13Recommendation.hidden_talent == True
     ).group_by(Student.branch).all()
 
     return {
         "timestamp": datetime.datetime.utcnow(),
-        "agent_class": "Class 3 (Prescriptive)",
-        "total_recommendations_generated": total_runs,
+        "total_recommendations": total_recs,
         "branch_distribution": {row.branch: row.count for row in branch_distribution},
-        "decision_outcomes": {row.decision: row.count for row in decision_stats},
+        "decision_outcomes": {row.status: row.count for row in decision_stats},
         "hidden_talent_identified": {row.branch: row.count for row in hidden_talent_stats},
-        "status": "COMPLIANT" if total_runs > 0 else "NO_DATA"
+        "status": "COMPLIANT" if total_recs > 0 else "NO_DATA"
     }

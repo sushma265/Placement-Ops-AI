@@ -310,3 +310,49 @@ export async function matchResumeToDrive(driveId: number): Promise<JDMatchResult
     body: JSON.stringify({ drive_id: driveId }),
   }))
 }
+
+// ==========================================
+// AGENT 13 (TALENT DISCOVERY) ENDPOINTS
+// ==========================================
+
+export interface Agent13Recommendation {
+  id: string
+  student_name: string
+  opportunity_title: string
+  status: string
+  fit_score: number
+  hidden_talent: boolean
+  hidden_talent_explanation: string | null
+  evidence_breakdown: any
+  created_at: string
+}
+
+export async function getAgent13Recommendations(): Promise<{ recommendations: Agent13Recommendation[] }> {
+  return handle(await safeFetch('/api/agent13/recommendations'))
+}
+
+export async function verifyResumeClaim(claimId: string, decision: 'VERIFIED' | 'REJECTED'): Promise<{ message: string }> {
+  return handle(await safeFetch(`/api/agent13/resume-claims/${claimId}/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision }),
+  }))
+}
+
+export async function reviewAgent13Recommendation(id: string, decision: 'APPROVED' | 'REJECTED'): Promise<{ message: string }> {
+  return handle(await safeFetch(`/api/agent13/recommendations/${id}/review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision }),
+  }))
+}
+
+export async function executeAgent13Recommendation(id: string): Promise<{ message: string }> {
+  return handle(await safeFetch(`/api/agent13/recommendations/${id}/execute`, {
+    method: 'POST',
+  }))
+}
+
+export async function getAgent13FairnessAudit(): Promise<any> {
+  return handle(await safeFetch('/api/agent13/audit/fairness'))
+}

@@ -37,111 +37,111 @@ RULES:
 class TalentDiscoveryAgent:
     @staticmethod
     def run_discovery_for_student(db: Session, student_id: int, triggered_by_profile_id: str) -> Optional[str]:
-        """
-        Executes Agent 13 for a specific student.
-        1. Creates AgentRun.
-        2. Queries the 3 deterministic SQL views to build the JSON snapshot.
-        3. Saves AgentRunInput.
-        4. Calls Claude with the snapshot.
-        5. Saves AgentOutput and HumanReview.
-        Returns the output_id if successful, None otherwise.
-        """
-        # 1. Create Run
-        run = AgentRun(agent_code="A13_FAST_LEARNER", triggered_by=triggered_by_profile_id, status="STARTED")
-        db.add(run)
-        db.commit()
-        db.refresh(run)
-
-        # 2. Query Deterministic SQL Views
-        strength_rows = db.execute(
-            text("SELECT * FROM outcomes.v_student_strength_profile WHERE student_id = :sid"),
-            {"sid": student_id}
-        ).fetchall()
-
-        if not strength_rows:
-            run.status = "FAILED - STUDENT NOT FOUND"
-            db.commit()
-            return None
-
-        eligibility_fit = db.execute(
-            text("SELECT * FROM outcomes.v_opportunity_eligibility_and_fit WHERE student_id = :sid AND is_eligible = TRUE"),
-            {"sid": student_id}
-        ).fetchall()
-
-        faculty_matches = db.execute(
-            text("SELECT * FROM outcomes.v_faculty_mentor_compatibility WHERE student_id = :sid"),
-            {"sid": student_id}
-        ).fetchall()
-
-        first = strength_rows[0]
-
-        # Build Context Snapshot
-        context_snapshot = {
-            "student": {
-                "id": first.student_id,
-                "branch": first.branch,
-                "cgpa": float(first.cgpa) if first.cgpa else None,
-                "cgpa_percentile": float(first.cgpa_percentile) if first.cgpa_percentile else None
-            },
-            "scores": {
-                row.domain: float(row.domain_score) for row in strength_rows
-            },
-            "flags": {
-                "is_hidden_talent": any(row.is_hidden_talent for row in strength_rows),
-                "hidden_talent_domains": [row.domain for row in strength_rows if row.is_hidden_talent],
-                "growth_status": first.growth_status
-            },
-            "eligible_opportunities": [
-                {
-                    "project_id": str(row.project_id),
-                    "fit_score": float(row.fit_score) if row.fit_score else 0.0
-                } for row in eligibility_fit
-            ],
-            "compatible_faculty": [
-                {
-                    "faculty_id": row.faculty_id,
-                    "faculty_name": row.faculty_name,
-                    "compatibility_score": float(row.compatibility_score) if row.compatibility_score else 0.0
-                } for row in faculty_matches
-            ]
-        }
-
-        # 3. Save Input Snapshot
-        run_input = AgentRunInput(run_id=run.run_id, context_snapshot=context_snapshot)
-        db.add(run_input)
-        db.commit()
-
-        # 4. Call Claude
-        claude_response = call_claude_for_agent13(
-            system_prompt=AGENT13_SYSTEM_PROMPT,
-            context_snapshot=context_snapshot
-        )
-
-        if not claude_response:
-            run.status = "FAILED - LLM ERROR"
-            db.commit()
-            return None
-
-        # 5. Save Output and Review
-        output = AgentOutput(
-            run_id=run.run_id,
-            subject_type="STUDENT",
-            subject_id=student_id,
-            payload=claude_response,
-            reasoning_summary=claude_response.get("explainable_summary", "No summary provided."),
-            confidence=float(claude_response.get("confidence", 0.0))
-        )
-        db.add(output)
-        db.commit()
-        db.refresh(output)
-
-        review = HumanReview(
-            output_id=output.output_id,
-            decision="PENDING"
-        )
-        db.add(review)
+        # 1. Fetch Student and Evidence
+        from backend.models import Student, ResumeClaim, Agent13Recommendation, ResearchProject, ProjectRequirement
         
-        run.status = "COMPLETED"
+        student = db.query(Student).filter(Student.id == student_id).first()
+        if not student:
+            return None
+            
+        # Fetch institutional evidence (simulated via existing json arrays for this MVP unless proper tables exist)
+        # We treat student.skills, student.certifications, etc. as VERIFIED institutional evidence
+        verified_skills = [s.get("skill", "").lower() for s in (student.skills or [])]
+        
+        # Fetch Resume Claims
+        claims = db.query(ResumeClaim).filter(ResumeClaim.student_id == student_id).all()
+        provisional_skills = [c.normalized_skill for c in claims if c.verification_status == "PROVISIONAL" and c.normalized_skill]
+        rejected_skills = [c.normalized_skill for c in claims if c.verification_status == "REJECTED" and c.normalized_skill]
+        
+        # 2. Fetch Opportunities (Research Projects)
+        opportunities = db.query(ResearchProject).filter(ResearchProject.status == "ACTIVE").all()
+        
+        new_recommendations = []
+        
+        for opp in opportunities:
+            # Stage 1: Hard Eligibility
+            # Assume all students are eligible for this MVP unless the project has specific hard requirements.
+            # Let's fetch requirements
+            requirements = db.query(ProjectRequirement).filter(
+                ProjectRequirement.project_id == opp.project_id,
+                ProjectRequirement.is_required == True
+            ).all()
+            
+            is_eligible = True
+            for req in requirements:
+                if req.skill:
+                    req_skill = req.skill.lower()
+                    if req_skill not in verified_skills and req_skill not in provisional_skills:
+                        is_eligible = False
+                        break
+            
+            if not is_eligible:
+                continue # Skip to next opportunity
+                
+            # Stage 2: Graded Fit
+            # Calculate fit score based on requirements (both required and optional)
+            all_reqs = db.query(ProjectRequirement).filter(ProjectRequirement.project_id == opp.project_id).all()
+            
+            score = 0.0
+            max_possible_score = max(1.0, float(len(all_reqs))) # Avoid division by zero
+            evidence_breakdown = {
+                "verified": [],
+                "provisional": [],
+                "rejected": []
+            }
+            
+            for req in all_reqs:
+                if not req.skill: continue
+                req_skill = req.skill.lower()
+                weight = req.weight or 1.0
+                max_possible_score += weight
+                
+                if req_skill in rejected_skills:
+                    evidence_breakdown["rejected"].append(f"Rejected claim for {req.skill} (Weight: 0.0)")
+                elif req_skill in verified_skills:
+                    score += (1.0 * weight)
+                    evidence_breakdown["verified"].append(f"Institutional evidence for {req.skill} (Weight: 1.0)")
+                elif req_skill in provisional_skills:
+                    score += (0.3 * weight)
+                    evidence_breakdown["provisional"].append(f"Resume claim for {req.skill} (Weight: 0.3)")
+            
+            # Normalize score to 100
+            normalized_score = round((score / max_possible_score) * 100, 1)
+            
+            # Hidden Talent Detection
+            # If the student score is > 60 BUT they lack verified evidence for at least half the requirements
+            # (meaning their score is carried by provisional resume claims or minor verified bits)
+            hidden_talent = False
+            hidden_talent_expl = None
+            if normalized_score > 50 and len(evidence_breakdown["provisional"]) > len(evidence_breakdown["verified"]):
+                hidden_talent = True
+                hidden_talent_expl = "Student shows strong potential based on unverified resume claims that align well with this opportunity, despite lacking formal institutional tags."
+            
+            # 3. Create Recommendation
+            # Check if one already exists
+            existing = db.query(Agent13Recommendation).filter(
+                Agent13Recommendation.student_id == student_id,
+                Agent13Recommendation.opportunity_id == opp.project_id
+            ).first()
+            
+            if existing:
+                existing.fit_score = normalized_score
+                existing.evidence_breakdown = evidence_breakdown
+                existing.hidden_talent = hidden_talent
+                existing.hidden_talent_explanation = hidden_talent_expl
+            else:
+                rec = Agent13Recommendation(
+                    student_id=student_id,
+                    opportunity_id=opp.project_id,
+                    opportunity_type="RESEARCH",
+                    status="DISCOVERED",
+                    fit_score=normalized_score,
+                    hidden_talent=hidden_talent,
+                    hidden_talent_explanation=hidden_talent_expl,
+                    evidence_breakdown=evidence_breakdown
+                )
+                db.add(rec)
+                new_recommendations.append(rec)
+                
         db.commit()
-
-        return output.output_id
+        return f"Processed {len(opportunities)} opportunities."

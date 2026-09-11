@@ -228,14 +228,32 @@ class CourseDomainTag(Base):
 class ResumeClaim(Base):
     __tablename__ = "resume_claim"
     __table_args__ = {"schema": "studentlife"}
-    claim_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    resume_claim_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
     claim_type = Column(String, nullable=False)
-    description = Column(Text, nullable=False)
-    domain = Column(String, nullable=False)
-    verification_status = Column(String, default="PENDING")
-    promoted_to_achievement_id = Column(String, nullable=True)
+    claim_text = Column(Text, nullable=False)
+    normalized_skill = Column(String, nullable=True, index=True)
+    source_document_id = Column(String, nullable=True, index=True)
+    extraction_confidence = Column(Float, nullable=True)
+    verification_status = Column(String, default="PROVISIONAL", index=True) # PROVISIONAL, VERIFIED, REJECTED
+    verified_by = Column(String, ForeignKey("profile_roles.profile_id"), nullable=True)
+    verified_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class Agent13Recommendation(Base):
+    __tablename__ = "agent13_recommendation"
+    __table_args__ = {"schema": "agentops"}
+    recommendation_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
+    opportunity_id = Column(String, nullable=False, index=True) # E.g., research.project.project_id
+    opportunity_type = Column(String, nullable=False) # RESEARCH, MENTORSHIP, HACKATHON
+    status = Column(String, default="DISCOVERED", index=True) # DISCOVERED, MATCHED, RECOMMENDED, PENDING_APPROVAL, APPROVED, EXECUTED, REJECTED
+    hidden_talent = Column(Boolean, default=False)
+    hidden_talent_explanation = Column(Text, nullable=True)
+    fit_score = Column(Float, default=0.0)
+    evidence_breakdown = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
 # ==========================================
 # AGENT 13 - RESEARCH / FACULTY

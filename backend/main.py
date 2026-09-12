@@ -1622,37 +1622,66 @@ def execute_agent13_recommendation(
 
     return {"message": "Execution successful. Student assigned to opportunity."}
 
+@app.get("/api/agent13/student/{student_id}/profile")
+def get_agent13_student_multidimensional_profile(
+    student_id: int,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user)
+):
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    if user.role == "student" and student.profile_id != user.profile_id:
+        raise HTTPException(status_code=403, detail="You can only view your own profile.")
+
+    profile_data = TalentDiscoveryAgent.calculate_multidimensional_profile(db, student_id)
+    pathway = TalentDiscoveryAgent.generate_personalized_pathway(student, profile_data)
+    faculty_matches = FacultyExpertiseAgent.match_faculty_for_student(db, student, profile_data.get("domain_scores", {}))
+
+    return {
+        "profile": profile_data,
+        "pathway": pathway,
+        "faculty_matches": faculty_matches[:5]
+    }
+
+@app.get("/api/agent13/verification-queue")
+def get_verification_queue(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_role("tpo", "faculty", "principal"))
+):
+    from backend.agents.achievement_verification_agent import AchievementVerificationAgent
+    return {"queue": AchievementVerificationAgent.get_pending_verification_queue(db)}
+
+class UpdateOutcomeStatusRequest(BaseModel):
+    status: str
+    completion_notes: Optional[str] = None
+
+@app.patch("/api/agent13/outcomes/{membership_id}/status")
+def update_outcome_status(
+    membership_id: str,
+    req: UpdateOutcomeStatusRequest,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_role("tpo", "faculty", "principal"))
+):
+    from backend.agents.outcome_tracking_agent import OutcomeTrackingAgent
+    res = OutcomeTrackingAgent.update_participation_status(
+        db, membership_id, req.status, updated_by=user.email, completion_notes=req.completion_notes
+    )
+    return res
+
+@app.get("/api/agent13/outcomes/student/{student_id}")
+def get_student_outcomes(
+    student_id: int,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user)
+):
+    from backend.agents.outcome_tracking_agent import OutcomeTrackingAgent
+    return {"outcomes": OutcomeTrackingAgent.get_student_outcomes(db, student_id)}
+
 @app.get("/api/agent13/audit/fairness")
 def get_agent13_fairness_audit(
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_role("tpo", "principal"))
+    user: CurrentUser = Depends(require_role("tpo", "principal", "faculty"))
 ):
-    from sqlalchemy import func
-    
-    total_recs = db.query(Agent13Recommendation).count()
-    
-    branch_distribution = db.query(
-        Student.branch, 
-        func.count(Agent13Recommendation.recommendation_id).label("count")
-    ).join(Student, Agent13Recommendation.student_id == Student.id).group_by(Student.branch).all()
-    
-    decision_stats = db.query(
-        Agent13Recommendation.status,
-        func.count(Agent13Recommendation.recommendation_id).label("count")
-    ).group_by(Agent13Recommendation.status).all()
-    
-    hidden_talent_stats = db.query(
-        Student.branch,
-        func.count(Agent13Recommendation.recommendation_id).label("count")
-    ).join(Student, Agent13Recommendation.student_id == Student.id).filter(
-        Agent13Recommendation.hidden_talent == True
-    ).group_by(Student.branch).all()
-
-    return {
-        "timestamp": datetime.datetime.utcnow(),
-        "total_recommendations": total_recs,
-        "branch_distribution": {row.branch: row.count for row in branch_distribution},
-        "decision_outcomes": {row.status: row.count for row in decision_stats},
-        "hidden_talent_identified": {row.branch: row.count for row in hidden_talent_stats},
-        "status": "COMPLIANT" if total_recs > 0 else "NO_DATA"
-    }
+    from backend.agents.fairness_audit_agent import FairnessAuditAgent
+    return FairnessAuditAgent.run_fairness_audit(db)

@@ -227,12 +227,12 @@ function Landing({ onOpen }: { onOpen: () => void }) {
       </nav>
       <section className="hero">
         <div className="hero-copy reveal reveal-copy">
-          <div className="kicker"><span className="live-pulse" /> AI-assisted placement operations</div>
-          <h1>Move every campus drive forward, <em>with confidence.</em></h1>
-          <p>Placement Ops turns the busywork behind recruitment into a clear, auditable workflow. Your team stays in control at every decision point.</p>
+          <div className="kicker"><span className="live-pulse" /> Agent 13 • Advanced Learner Intelligence</div>
+          <h1>Identify potential. Build strengths. <em>Unlock opportunities.</em></h1>
+          <p>Agent 13 analyzes academic trajectory, verified achievements, multidimensional strengths, and faculty research areas to connect high-potential students with research assistantships, hackathons, mentors, and personalized learning pathways.</p>
           <div className="hero-actions">
-            <Button onClick={onOpen}>Explore the workspace <ArrowRight size={16} /></Button>
-            <a className="text-link" href="#agents">See how it works <MoveRight size={16} /></a>
+            <Button onClick={onOpen}>Explore Your Strengths <ArrowRight size={16} /></Button>
+            <a className="text-link" href="#agents">Discover Opportunities <MoveRight size={16} /></a>
           </div>
         </div>
         <div className="hero-visual reveal reveal-visual">

@@ -722,6 +722,37 @@ If `.env.local` is left unset, the app falls back to **Quick Demo Login** (sampl
 
 ## 18. UI Polish
 Added micro-interactions across the dashboard: staggered card/row reveal on every screen change, hover-lift on panels/metric cards/agent cards, button press feedback, focus glow on form inputs, and a shake animation on auth errors — all respecting `prefers-reduced-motion`.
+
+---
+
+## 19. AI Career Assistant & Student Profile Agents
+
+The platform includes **5 specialized AI Career Agents** accessible directly from the **Student Dashboard** via the interactive **AI Career Assistant** card:
+
+1. **📄 Improve Resume Agent**:
+   - Analyzes student ATS score, missing skills, bullet point impact, and section formatting.
+   - Generates tailored action items and quantifiable bullet points using STAR methodology.
+
+2. **🔍 Find Matching Jobs Agent**:
+   - Cross-references student profile (CGPA, branch, skills) against active published campus recruitment drives.
+   - Computes multi-vector AI match scores and highlights specific skill overlaps and eligibility cutoffs.
+
+3. **🎙️ Interview Preparation Agent**:
+   - Formulates customized technical interview prep strategies (DSA, System Design, SQL).
+   - Generates STAR-framework project deep-dive questions based on the candidate's actual projects.
+
+4. **📈 Skill Roadmap Agent**:
+   - Compares student current skills against in-demand tech stacks across all published company JDs.
+   - Builds a 4-week step-by-step technical learning roadmap.
+
+5. **🧭 Career Advice Agent**:
+   - Recommends career paths (Software Engineering, Data Science/AI, Cloud/DevOps) based on branch and academic performance.
+   - Provides tier-1 campus drive eligibility strategies and higher studies guidance.
+
+---
+
+## 20. Agent 13 — Talent Discovery & Non-Placement Opportunity Engine
+Identifies high-performing students with capacity beyond standard placement curricula and channels them into research projects, faculty collaborations, and competitive technical tracks under strict `ACT_WITH_APPROVAL` human review controls.
 #   P l a c e m e n t - O p s - A I 
  
  

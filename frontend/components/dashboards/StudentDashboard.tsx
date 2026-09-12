@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   Zap, LayoutDashboard, User as UserIcon, Briefcase, ClipboardList, CalendarDays,
   Sparkles, Bell, Settings, LogOut, Moon, Menu, ChevronDown, Loader2, Gauge,
-  Target, FileCheck2, Send, ShieldAlert, RotateCcw,
+  Target, FileCheck2, Send, ShieldAlert, RotateCcw, Lightbulb,
 } from 'lucide-react'
 import { getMyDashboard, getMyProfile, type StudentDashboardData, type StudentProfile } from '@/lib/student-api'
 import { supabase } from '@/lib/supabase'
@@ -17,10 +17,12 @@ import { ActivityTimeline } from '@/components/timeline/ActivityTimeline'
 import { EligibleJobs } from '@/components/jobs/EligibleJobs'
 import { AppliedJobs } from '@/components/jobs/AppliedJobs'
 import { CareerAssistantCard } from '@/components/ai/CareerAssistantCard'
+import { PersonalizedSuggestionsView } from '@/components/ai/PersonalizedSuggestionsView'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'profile', label: 'Profile', icon: UserIcon },
+  { id: 'suggestions', label: 'Personalized Suggestions', icon: Lightbulb },
   { id: 'jobs', label: 'Jobs', icon: Briefcase },
   { id: 'applications', label: 'Applications', icon: ClipboardList },
   { id: 'interviews', label: 'Interviews', icon: CalendarDays },
@@ -212,27 +214,31 @@ export function StudentDashboard({ user, onLogout }: { user: any; onLogout: () =
         </header>
 
         <main className="dashboard-main">
-          {/* Welcome header */}
-          <div className="section-title">
-            <div>
-              <div className="eyebrow">Welcome back</div>
-              <h1>{p.name}</h1>
-              <p>{p.branch} · CGPA {p.cgpa}</p>
-            </div>
-          </div>
+          {active === 'suggestions' ? (
+            <PersonalizedSuggestionsView studentProfile={p} />
+          ) : (
+            <>
+              {/* Welcome header */}
+              <div className="section-title">
+                <div>
+                  <div className="eyebrow">Welcome back</div>
+                  <h1>{p.name}</h1>
+                  <p>{p.branch} · CGPA {p.cgpa}</p>
+                </div>
+              </div>
 
-          {/* Quick stats */}
-          <div className="metric-grid">
-            <StatsCard label="Profile Completion" value={`${stats.profile_completion_pct}%`} icon={Gauge} />
-            <StatsCard label="Placement Readiness" value={stats.placement_readiness_score} icon={Target} />
-            <StatsCard label="Resume ATS Score" value={stats.resume_ats_score ?? 'Not scored yet'} icon={FileCheck2} />
-            <StatsCard label="Applied Jobs" value={stats.applied_jobs_count} icon={Send} />
-            <StatsCard label="Eligible Jobs" value={stats.eligible_jobs_count} icon={Briefcase} />
-            <StatsCard label="Upcoming Interviews" value={stats.upcoming_interviews_count} icon={CalendarDays} />
-            <StatsCard label="Notifications" value={stats.notifications_count} icon={Bell} tone="coral" />
-          </div>
+              {/* Quick stats */}
+              <div className="metric-grid">
+                <StatsCard label="Profile Completion" value={`${stats.profile_completion_pct}%`} icon={Gauge} />
+                <StatsCard label="Placement Readiness" value={stats.placement_readiness_score} icon={Target} />
+                <StatsCard label="Resume ATS Score" value={stats.resume_ats_score ?? 'Not scored yet'} icon={FileCheck2} />
+                <StatsCard label="Applied Jobs" value={stats.applied_jobs_count} icon={Send} />
+                <StatsCard label="Eligible Jobs" value={stats.eligible_jobs_count} icon={Briefcase} />
+                <StatsCard label="Upcoming Interviews" value={stats.upcoming_interviews_count} icon={CalendarDays} />
+                <StatsCard label="Notifications" value={stats.notifications_count} icon={Bell} tone="coral" />
+              </div>
 
-          {profile && <ProfileCompletionCard profile={profile} />}
+              {profile && <ProfileCompletionCard profile={profile} />}
 
           <div className="dashboard-grid mt-4">
             <div>
@@ -291,6 +297,8 @@ export function StudentDashboard({ user, onLogout }: { user: any; onLogout: () =
               </div>
             </div>
           </div>
+        </>
+      )}
         </main>
       </div>
     </div>

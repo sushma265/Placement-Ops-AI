@@ -240,6 +240,31 @@ export async function applyToDrive(driveId: number): Promise<{ drive_id: number;
   return handle(await safeFetch(`/students/me/apply/${driveId}`, { method: 'POST' }))
 }
 
+export interface RoleSuggestion {
+  role_title: string
+  category: string
+  compatibility_pct: number
+  base_salary: string
+  overview: string
+  key_matching_skills: string[]
+  why_matched: string[]
+  recommended_action: string
+  is_best_match?: boolean
+}
+
+export interface PersonalizedSuggestionsData {
+  student_name: string
+  branch: string
+  cgpa: number
+  top_recommended_role: string
+  verdict_reasoning: string
+  roles: RoleSuggestion[]
+}
+
+export async function getMyRoleSuggestions(): Promise<PersonalizedSuggestionsData> {
+  return handle(await safeFetch('/students/me/role-suggestions'))
+}
+
 export interface ScoreBreakdownEntry {
   score: number
   max: number

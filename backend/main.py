@@ -245,6 +245,23 @@ def get_my_student_profile(
     return payload
 
 
+@app.get("/students/me/role-suggestions")
+def get_my_role_suggestions(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_role("student")),
+):
+    student = _get_own_student(db, user)
+    student_data = {
+        "name": student.name,
+        "branch": student.branch,
+        "cgpa": student.cgpa,
+        "skills": student.skills or [],
+        "projects": student.projects or [],
+        "certifications": student.certifications or [],
+    }
+    return StudentAssistantAgent.generate_personalized_role_suggestions(student_data)
+
+
 NON_NEGATIVE_FIELDS = {"cgpa", "tenth_pct", "twelfth_pct", "backlog_count", "expected_salary"}
 
 @app.patch("/students/me")

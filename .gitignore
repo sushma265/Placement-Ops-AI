@@ -22,3 +22,6 @@ student_auth_credentials.csv
 node_modules
 .next/
 .DS_Store
+__pycache__/
+*.pyc
+*.db

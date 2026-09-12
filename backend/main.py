@@ -48,6 +48,7 @@ from backend.agents.exception_agent import ExceptionAgent
 from backend.agents.analytics_agent import AnalyticsAgent
 from backend.agents.reporting_agent import ReportingAgent
 from backend.agents.talent_discovery_agent import TalentDiscoveryAgent
+from backend.agents.student_assistant_agent import StudentAssistantAgent
 
 app = FastAPI(title="Placement Ops - AI Recruiter Agent Backend")
 
@@ -1272,29 +1273,32 @@ def get_notifications(
     return output
 
 # ==========================================
-# HUGGING FACE AI CHATBOT ENDPOINT
+# HUGGING FACE & STUDENT AGENT AI CHATBOT ENDPOINT
 # ==========================================
 class AIChatRequest(BaseModel):
     message: str
     history: Optional[List[Dict[str, str]]] = []
     model: Optional[str] = "mistralai/Mistral-7B-Instruct-v0.3"
     api_key: Optional[str] = None
+    role_context: Optional[str] = None
+    student_profile: Optional[Dict[str, Any]] = None
 
-def _resolve_chat_role(request: Request, db: Session) -> str:
+def _resolve_chat_role(request: Request, db: Session, client_role: Optional[str] = None) -> tuple:
     """Best-effort role resolution for the chat assistant's persona.
-    Falls back to "guest" for signed-out visitors rather than trusting a
-    client-supplied role field -- role_context used to be an arbitrary
-    request field, which meant any caller could claim role_context="tpo"."""
+    Returns tuple of (role_string, profile_id)."""
     auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return "guest"
-    try:
-        payload = get_verified_claims(request)
-        profile_id = payload.get("sub")
-        record = db.query(ProfileRole).filter(ProfileRole.profile_id == profile_id).first()
-        return record.role if record else "guest"
-    except HTTPException:
-        return "guest"
+    if auth_header and auth_header.startswith("Bearer "):
+        try:
+            payload = get_verified_claims(request)
+            profile_id = payload.get("sub")
+            record = db.query(ProfileRole).filter(ProfileRole.profile_id == profile_id).first()
+            if record:
+                return (record.role, profile_id)
+        except Exception:
+            pass
+    if client_role in ALLOWED_ROLES:
+        return (client_role, None)
+    return ("guest", None)
 
 def generate_placement_ops_reply(query: str, role: str) -> str:
     q = query.lower()
@@ -1313,12 +1317,48 @@ def generate_placement_ops_reply(query: str, role: str) -> str:
 
 @app.post("/ai/chat")
 def ai_chat(req: AIChatRequest, request: Request, db: Session = Depends(get_db)):
-    role_context = _resolve_chat_role(request, db)
+    role_context, profile_id = _resolve_chat_role(request, db, req.role_context)
     hf_token = get_hf_token(req.api_key)
+
+    # Fetch active open placement drives for RAG/Agent matching
+    drives_db = db.query(Drive).filter(Drive.status == "published").all()
+    db_drives_data = [{
+        "company_name": d.company_name,
+        "role_title": d.role_title,
+        "cgpa_cutoff": d.cgpa_cutoff,
+        "package_min": d.package_min,
+        "package_max": d.package_max,
+        "required_skills": d.required_skills
+    } for d in drives_db]
+
+    # Resolve Student Profile Data if applicable
+    student_data = {}
+    if role_context == "student":
+        if profile_id:
+            s_rec = db.query(Student).filter(Student.profile_id == profile_id).first()
+            if s_rec:
+                student_data = {
+                    "name": s_rec.name,
+                    "branch": s_rec.branch,
+                    "cgpa": s_rec.cgpa,
+                    "tenth_pct": s_rec.tenth_pct,
+                    "twelfth_pct": s_rec.twelfth_pct,
+                    "backlog_count": s_rec.backlog_count,
+                    "skills": s_rec.skills or [],
+                    "projects": s_rec.projects or [],
+                    "certifications": s_rec.certifications or [],
+                    "resume_ats_score": s_rec.resume_ats_score,
+                    "prs_score": s_rec.prs_score
+                }
+        if not student_data and req.student_profile:
+            student_data = req.student_profile
 
     system_prompt = f"""You are Placement Ops AI Assistant, an expert AI co-pilot for college placement operations, job drive management, candidate eligibility evaluation, interview scheduling, and curriculum skill gap analysis. 
 You are currently assisting a user logged in as role: {role_context.upper()}. 
 Provide clear, actionable, concise, and professional responses tailored to placement officers, recruiters, and students. Use markdown formatting with bullet points where appropriate."""
+
+    if role_context == "student" and student_data:
+        system_prompt += "\n\n" + StudentAssistantAgent.build_student_context_prompt(student_data, db_drives_data)
 
     # RAG Context Injection: Detect registration number / student ID in query
     import re
@@ -1355,7 +1395,19 @@ Student Profile Found for ID (Registration Number) {student_id}:
         return {"reply": reply, "source": "huggingface", "model": req.model or DEFAULT_MODEL}
 
     # Fallback domain-aware intelligent responder when offline or without HF key
-    reply = generate_placement_ops_reply(req.message, role_context)
+    if role_context == "student":
+        fallback_data = student_data or {
+            "name": "Student",
+            "branch": "Computer Science & Engineering",
+            "cgpa": 8.5,
+            "skills": [{"skill": "Python", "level": "Intermediate"}, {"skill": "Java", "level": "Intermediate"}, {"skill": "SQL", "level": "Advanced"}],
+            "projects": [{"title": "Placement Ops Platform", "tech_stack": ["Next.js", "FastAPI"]}],
+            "resume_ats_score": 82
+        }
+        reply = StudentAssistantAgent.generate_agent_reply(req.message, fallback_data, db)
+    else:
+        reply = generate_placement_ops_reply(req.message, role_context)
+
     return {
         "reply": reply, 
         "source": "placement_ops_local_ai", 

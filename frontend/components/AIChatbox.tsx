@@ -5,7 +5,7 @@ import {
   Sparkles, X, Send, Bot, User, Key, Settings,
   RefreshCw, Copy, Check, Cpu
 } from 'lucide-react'
-import { BACKEND_URL } from '../lib/api'
+import { apiFetch } from '../lib/api'
 
 interface Message {
   id: string
@@ -91,11 +91,10 @@ export function AIChatbox({ userRole = 'tpo' }: AIChatboxProps) {
     if (!textToSend) setInput('')
     setLoading(true)
 
-    const backendUrl = BACKEND_URL
     const storedKey = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('placement_ops_hf_key') || '' : '')
 
     try {
-      const response = await fetch(`${backendUrl}/ai/chat`, {
+      const response = await apiFetch('/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

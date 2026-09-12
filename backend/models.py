@@ -13,6 +13,8 @@ class Student(Base):
     # exist without an owner; a real student row created via /auth/sync-profile
     # always has this set, and app-level access checks require it.
     profile_id = Column(String, ForeignKey("profile_roles.profile_id"), unique=True, nullable=True, index=True)
+    roll_number = Column(String, unique=True, index=True, nullable=True)
+    section = Column(String, nullable=True)
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     branch = Column(String, nullable=False)
